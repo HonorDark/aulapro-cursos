@@ -1,0 +1,30 @@
+// Orden central de la cascada. Cada nueva funcionalidad debe importar su CSS
+// desde este punto hasta que la migración a estilos por feature esté completa.
+import "./legacy/StudentPanel.css";
+import "./legacy/StudentColorful.css";
+import "./legacy/StudentScale.css";
+import "./legacy/StudentThreeColumns.css";
+import "./legacy/StudentCompactHeader.css";
+import "./legacy/App.css";
+import "./legacy/DashboardTheme.css";
+import "./legacy/Branding.css";
+import "./legacy/HomeTheme.css";
+import "./legacy/FooterTheme.css";
+import "./legacy/Carousel.css";
+import "./legacy/AuthTheme.css";
+import "./legacy/AuthFix.css";
+import "./legacy/CatalogTheme.css";
+import "./legacy/FooterResponsive.css";
+import "./legacy/SidebarPro.css";
+import "./legacy/AdminPanel.css";
+import "./legacy/SidebarClean.css";
+import "./legacy/HamburgerHeader.css";
+import "./legacy/InsideCatalog.css";
+import "./legacy/PaymentTheme.css";
+import "./legacy/CourseOverview.css";
+import "./legacy/AcademicTheme.css";
+import "../features/course-editor/course-editor.css";
+import "../features/students/students-admin.css";
+import "../features/notifications/notifications.css";
+import "../features/courses/admin/courses-admin.css";
+import "./legacy/AdminAcademicRefresh.css";

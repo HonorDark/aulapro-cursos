@@ -1,0 +1,30 @@
+import express from "express";
+import cors from "cors";
+import { env } from "./config/env";
+import authRoutes from "./routes/auth";
+import courseRoutes from "./routes/courses";
+import learningRoutes from "./routes/learning";
+import userRoutes from "./routes/users";
+import adminRoutes from "./routes/admin";
+import contentRoutes from "./routes/content";
+import paymentRoutes from "./routes/payments";
+import academicRoutes from "./routes/academic";
+import notificationRoutes from "./routes/notifications";
+import { errorHandler, notFound } from "./middleware/error";
+export const app = express();
+app.use(cors({ origin: env.frontendUrl }));
+app.use(express.json({ limit: "8mb" }));
+app.get("/api/health", (_req, res) =>
+  res.json({ success: true, data: { status: "ok" } }),
+);
+app.use("/api/auth", authRoutes);
+app.use("/api/courses", courseRoutes);
+app.use("/api", learningRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/content", contentRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/academic", academicRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use(notFound);
+app.use(errorHandler);

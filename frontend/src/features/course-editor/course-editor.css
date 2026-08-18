@@ -1,0 +1,752 @@
+/* Course editor ---------------------------------------------------------- */
+.dashboard-content:has(.editor-head) {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding-inline: clamp(22px, 2.2vw, 38px);
+}
+
+.editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 28px;
+  width: 100%;
+  margin-bottom: 22px;
+  padding: 6px 2px 4px;
+  box-sizing: border-box;
+}
+
+.editor-head > div > span,
+.curriculum-editor-head span,
+.editor-title-row span,
+.editor-modal header span,
+.module-settings-card > div:first-child > span {
+  color: #6744e9;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.editor-head h1 {
+  margin: 5px 0;
+  font:
+    800 30px Manrope,
+    sans-serif;
+  letter-spacing: -0.7px;
+}
+
+.editor-head p {
+  margin: 0;
+  color: #778198;
+}
+
+.editor-message {
+  position: sticky;
+  top: 79px;
+  z-index: 5;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border-radius: 9px;
+  background: #eaf7ef;
+  box-shadow: 0 8px 25px #22694418;
+  color: #277f51;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+/* Course picker ---------------------------------------------------------- */
+.course-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr);
+  align-items: end;
+  gap: 6px 9px;
+  width: min(440px, 42vw);
+  flex: none;
+}
+
+.course-picker > label {
+  grid-column: 1 / -1;
+  color: #707991;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.course-search-field,
+.course-select-field {
+  position: relative;
+  min-width: 0;
+}
+
+.course-search-field > svg,
+.course-select-field > svg {
+  position: absolute;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  color: #8790a6;
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
+.course-search-field > svg {
+  left: 11px;
+}
+.course-select-field > svg {
+  right: 10px;
+}
+
+.course-search-field input,
+.course-select-field select {
+  width: 100%;
+  height: 42px;
+  box-sizing: border-box;
+  border: 1px solid #dfe2eb;
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+  color: #17203a;
+  font: 600 11px inherit;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.course-search-field input {
+  padding: 0 36px 0 35px;
+}
+.course-select-field select {
+  padding: 0 34px 0 12px;
+  appearance: none;
+}
+
+.course-search-field input:focus,
+.course-select-field select:focus {
+  border-color: #7658ee;
+  box-shadow: 0 0 0 3px #7658ee18;
+}
+
+.course-search-field button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: #f0edff;
+  color: #6542e9;
+  translate: 0 -50%;
+  cursor: pointer;
+}
+
+.course-search-field button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.course-picker > small {
+  grid-column: 1 / -1;
+  color: #8b93a7;
+  font-size: 9px;
+  text-align: right;
+}
+
+/* General course form ---------------------------------------------------- */
+.course-main-editor {
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  gap: 26px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 22px;
+  border: 1px solid #e1e4ed;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 35px #2925520a;
+}
+
+.editor-cover {
+  align-self: start;
+  padding: 11px;
+  border: 1px solid #e8e9f1;
+  border-radius: 14px;
+  background: #f7f7fb;
+}
+
+.editor-cover img {
+  width: 100%;
+  height: 178px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #eff0f5;
+}
+
+.editor-cover label,
+.editor-fields label,
+.module-settings label,
+.lesson-editor-fields label,
+.editor-modal form > label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #48516a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.editor-cover label {
+  margin-top: 12px;
+}
+.editor-cover label svg,
+.lesson-editor-fields label svg,
+.editor-modal label svg {
+  width: 14px;
+}
+.editor-fields {
+  min-width: 0;
+}
+
+.editor-cover input,
+.editor-fields input,
+.editor-fields select,
+.editor-fields textarea,
+.module-settings input,
+.lesson-editor-fields input,
+.lesson-editor-fields textarea,
+.editor-modal input,
+.editor-modal textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #dfe2eb;
+  border-radius: 8px;
+  background: #fbfbfd;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.editor-cover input,
+.editor-fields input,
+.editor-fields select {
+  height: 40px;
+}
+.editor-fields textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.editor-title-row,
+.curriculum-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-title-row {
+  min-height: 52px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #eceef3;
+}
+
+.editor-title-row h2,
+.curriculum-editor-head h2 {
+  margin: 4px 0 14px;
+  font-size: 19px;
+}
+
+.editor-title-row button,
+.curriculum-editor-head button,
+.editor-save {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: #6542e9;
+  color: #fff;
+  padding: 10px 14px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.editor-title-row svg,
+.curriculum-editor-head svg,
+.editor-save svg {
+  width: 15px;
+}
+
+.editor-two,
+.editor-three {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+.editor-two {
+  grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.75fr);
+}
+.editor-three {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  margin-top: 10px;
+}
+
+.publish-check {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center;
+  gap: 7px !important;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 9px;
+  border-radius: 8px;
+  background: #f0edff;
+}
+
+.publish-check input {
+  width: auto;
+}
+
+/* Curriculum ------------------------------------------------------------- */
+.curriculum-editor-head {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 22px 2px 8px;
+}
+
+.curriculum-editor-head h2 {
+  margin-bottom: 0;
+  font-size: 21px;
+}
+.curriculum-editor {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.curriculum-editor > article {
+  overflow: hidden;
+  border: 1px solid #e0e3ec;
+  border-radius: 16px;
+  background: #fff;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.curriculum-editor > article.module-expanded {
+  border-color: #cfc7f8;
+  box-shadow: 0 14px 35px #32296f0d;
+}
+
+.module-editor-summary {
+  padding: 0;
+  background: #fff;
+}
+
+.module-editor-summary > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 17px 19px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.module-editor-summary > button > svg:first-child {
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 8px;
+  background: #eeeaff;
+  color: #6945e9;
+}
+
+.module-editor-summary > button > span {
+  display: grid;
+  flex: 1;
+}
+.module-editor-summary strong {
+  font-size: 13px;
+}
+.module-editor-summary small {
+  color: #8b94a8;
+  font-size: 10px;
+}
+.module-editor-summary > button > svg:last-child {
+  transition: transform 0.2s;
+}
+.module-expanded .module-editor-summary > button > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.module-editor-body {
+  display: block;
+  padding: 18px;
+  background: #f7f8fc;
+}
+
+.module-settings-card {
+  position: static;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 18px;
+  padding: 17px 18px;
+  border: 1px solid #e3e5ed;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.module-settings-card h3 {
+  margin: 4px 0 12px;
+  font-size: 14px;
+}
+.module-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 14px;
+}
+.module-settings input {
+  height: 39px;
+}
+
+.module-settings-card > footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eceef3;
+}
+
+.module-settings-card > footer button,
+.lesson-actions-edit button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.module-settings-card > footer svg,
+.lesson-actions-edit svg {
+  width: 14px;
+}
+.save-module {
+  background: #6543e8;
+  box-shadow: 0 7px 17px #6543e82a;
+  color: #fff;
+}
+.delete-module,
+.lesson-actions-edit button.danger {
+  background: #fff0f0;
+  color: #be4444;
+}
+
+.lessons-editor-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 2px 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e3e5ed;
+}
+
+.lessons-editor-heading > div {
+  display: grid;
+}
+.lessons-editor-heading strong {
+  font-size: 14px;
+}
+.lessons-editor-heading span {
+  color: #8c94a7;
+  font-size: 9px;
+}
+.lessons-editor-heading > button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #e9f3ff;
+  color: #2e6bc9;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.lessons-editor-heading svg {
+  width: 13px;
+}
+
+.lesson-editor-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+  padding: 16px;
+  border: 1px solid #e3e5ed;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 6px 18px #26214e07;
+}
+
+.lesson-number {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 7px;
+  background: #eeeaff;
+  color: #6845e7;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.lesson-editor-fields {
+  display: grid;
+  min-width: 0;
+  gap: 11px;
+}
+.lesson-editor-fields > div {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 95px 120px;
+  gap: 10px;
+}
+.lesson-editor-fields textarea {
+  min-height: 68px;
+  resize: vertical;
+  line-height: 1.45;
+}
+.lesson-editor-fields .publish-check {
+  width: max-content;
+  min-width: 180px;
+  height: 35px;
+}
+
+.lesson-actions-edit {
+  grid-column: 2;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding-top: 12px;
+  border-top: 1px solid #eceef3;
+}
+.lesson-actions-edit button:first-child {
+  background: #6542e9;
+  box-shadow: 0 6px 15px #6542e924;
+  color: #fff;
+}
+
+/* Lesson modal ----------------------------------------------------------- */
+.editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 15px;
+  background: #11162dcc;
+  backdrop-filter: blur(5px);
+}
+
+.editor-modal form {
+  display: grid;
+  gap: 11px;
+  width: min(590px, 100%);
+  padding: 23px;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.editor-modal header {
+  display: flex;
+  justify-content: space-between;
+}
+.editor-modal header p {
+  margin: 4px 0 0;
+  color: #7d869b;
+  font-size: 11px;
+}
+.editor-modal h2 {
+  margin: 4px 0;
+}
+.editor-modal header button {
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 50%;
+}
+.editor-modal textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.editor-save {
+  justify-content: center;
+  width: 100%;
+  padding: 11px;
+}
+.editor-save:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.module-create-modal form {
+  width: min(520px, 100%);
+}
+.module-modal-icon {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid #e5e0ff;
+  border-radius: 11px;
+  background: linear-gradient(120deg, #f2efff, #f7f9ff);
+  color: #778198;
+  font-size: 10px;
+}
+.module-modal-icon > svg {
+  width: 38px;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 9px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #7145ef, #4262ed);
+  color: #fff;
+}
+.module-modal-icon span {
+  display: grid;
+  gap: 2px;
+}
+.module-modal-icon strong {
+  color: #28314d;
+  font-size: 12px;
+}
+.editor-modal-error {
+  padding: 10px 12px;
+  border: 1px solid #f0c7ca;
+  border-radius: 9px;
+  background: #fff1f2;
+  color: #b73e49;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Responsive ------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .course-main-editor {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .editor-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .editor-head {
+    align-items: flex-start;
+  }
+  .course-picker {
+    width: min(420px, 48vw);
+  }
+}
+
+@media (max-width: 820px) {
+  .dashboard-content:has(.editor-head) {
+    padding-inline: 18px;
+  }
+  .course-main-editor {
+    grid-template-columns: 1fr;
+  }
+  .editor-cover {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 15px;
+  }
+  .editor-cover img {
+    height: 130px;
+  }
+}
+
+@media (max-width: 700px) {
+  .editor-head {
+    display: block;
+  }
+  .course-picker {
+    grid-template-columns: 1fr;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .course-picker > label,
+  .course-picker > small {
+    grid-column: 1;
+  }
+  .course-picker > small {
+    text-align: left;
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-content:has(.editor-head) {
+    padding-inline: 12px;
+  }
+  .editor-head h1 {
+    font-size: 26px;
+  }
+  .course-main-editor {
+    padding: 14px;
+  }
+  .editor-cover {
+    display: block;
+  }
+  .editor-cover img {
+    height: 165px;
+  }
+  .editor-two,
+  .editor-three,
+  .module-settings,
+  .lesson-editor-fields > div {
+    grid-template-columns: 1fr;
+  }
+  .editor-title-row {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .editor-title-row button {
+    font-size: 0;
+  }
+  .module-editor-body {
+    padding: 11px;
+  }
+  .module-settings-card > footer,
+  .lesson-actions-edit {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .module-settings-card > footer button,
+  .lesson-actions-edit button {
+    width: 100%;
+    min-width: 0;
+  }
+  .lessons-editor-heading > button {
+    font-size: 0;
+  }
+}

@@ -1,0 +1,14 @@
+.brand>.brand-icon{width:40px;height:40px;min-width:40px;border-radius:10px;background:#eeeaff;color:#5b3ff1;display:grid;place-items:center}
+.brand>.brand-icon svg{width:25px;height:25px;stroke-width:2.4}
+.brand>.brand-name{width:auto;height:auto;background:none;border-radius:0;display:inline;color:#17203a;font-size:23px;line-height:1}
+.brand>.brand-name>span{color:#5440ee}
+.brand.light>.brand-icon{background:#eeeaff;color:#5938f5}
+.brand.light>.brand-name{color:#17203a}
+.auth-page>.brand,.footer .brand,footer>.brand{font-size:0}
+.auth-page>.brand:after,footer>.brand:after{content:'AulaFlow';font:800 23px Manrope;color:#17203a}
+footer>span{font-size:0}
+footer>span:after{content:'© 2026 AulaFlow';font-size:14px}
+.logo-mini{background:#eeeaff!important;color:#5b3ff1!important}
+.logo-mini svg{width:24px;height:24px}
+.section-heading>.eyebrow{font-size:0}
+.section-heading>.eyebrow:after{content:'Selección AulaFlow';font-size:12px}

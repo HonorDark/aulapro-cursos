@@ -55,7 +55,6 @@ app.get("/api/health", readinessHandler);
 app.get("/api/health/ready", readinessHandler);
 app.use("/api/auth", authRateLimit, authRoutes);
 app.use("/api/courses", courseRoutes);
-app.use("/api", learningRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/content", contentRoutes);
@@ -65,5 +64,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/coursework", courseworkRoutes);
 app.use("/api/accounting", accountingRoutes);
 app.use("/api/management", managementRoutes);
+
+app.use("/api", learningRoutes);
+
 app.use(notFound);
 app.use(errorHandler);

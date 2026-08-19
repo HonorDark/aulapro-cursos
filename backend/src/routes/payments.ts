@@ -9,6 +9,7 @@ import {
   createNotification,
   createRoleNotification,
 } from "../services/notifications";
+import { validateUploadDataUrl } from "../utils/uploads";
 
 const router = Router();
 router.use(authenticate);
@@ -61,8 +62,12 @@ router.post(
         ]),
       })
       .parse(req.body);
-    if (!body.receiptData.startsWith(`data:${body.receiptMime};base64,`))
-      throw new AppError(400, "El comprobante no tiene un formato válido");
+    validateUploadDataUrl(body.receiptData, body.receiptMime);
+    const paidAt = body.paidAt.getTime();
+    if (paidAt > Date.now() + 10 * 60_000)
+      throw new AppError(400, "La fecha del pago no puede estar en el futuro");
+    if (paidAt < Date.now() - 366 * 24 * 60 * 60_000)
+      throw new AppError(400, "La fecha del pago es demasiado antigua");
     const course = await query<{ id: string; price: string; title: string }>(
       "SELECT id,price,title FROM courses WHERE id=$1 AND is_published=true",
       [body.courseId],
@@ -70,11 +75,12 @@ router.post(
     if (!course.rows[0]) throw new AppError(404, "Curso no disponible");
     if (Number(course.rows[0].price) <= 0)
       throw new AppError(400, "Este curso no requiere pago");
-    const enrolled = await query(
-      "SELECT 1 FROM enrollments WHERE user_id=$1 AND course_id=$2",
+    const enrolled = await query<{ access_status: string }>(
+      `SELECT access_status FROM enrollments
+       WHERE user_id=$1 AND course_id=$2`,
       [req.user!.id, body.courseId],
     );
-    if (enrolled.rows[0])
+    if (enrolled.rows[0] && enrolled.rows[0].access_status !== "REVOKED")
       throw new AppError(409, "Ya estás inscrito en este curso");
     const pending = await query(
       "SELECT id FROM payments WHERE user_id=$1 AND course_id=$2 AND status=$3",
@@ -157,6 +163,9 @@ router.patch(
         notes: z.string().trim().max(600).optional(),
       })
       .parse(req.body);
+    if (body.decision === "REJECTED" && (!body.notes || body.notes.length < 3)) {
+      throw new AppError(400, "Debes explicar el motivo del rechazo");
+    }
     const paymentId = String(req.params.id);
     const client = await pool.connect();
     try {
@@ -179,7 +188,12 @@ router.patch(
       );
       if (body.decision === "APPROVED")
         await client.query(
-          "INSERT INTO enrollments(user_id,course_id,payment_id) VALUES($1,$2,$3) ON CONFLICT(user_id,course_id) DO UPDATE SET payment_id=COALESCE(enrollments.payment_id,EXCLUDED.payment_id)",
+          `INSERT INTO enrollments(
+             user_id,course_id,payment_id,access_status,access_changed_at,access_reason
+           ) VALUES($1,$2,$3,'ACTIVE',NOW(),NULL)
+           ON CONFLICT(user_id,course_id) DO UPDATE SET
+             payment_id=EXCLUDED.payment_id,access_status='ACTIVE',
+             access_changed_at=NOW(),access_reason=NULL`,
           [payment.rows[0].user_id, payment.rows[0].course_id, paymentId],
         );
       await client.query("COMMIT");
@@ -189,7 +203,7 @@ router.patch(
         "payment",
         paymentId,
         { notes: body.notes ?? "" },
-      );
+      ).catch((error) => console.error("Payment audit failed", error));
       await createNotification(
         payment.rows[0].user_id,
         body.decision === "APPROVED" ? "Pago aprobado" : "Pago rechazado",
@@ -252,13 +266,20 @@ router.patch(
       );
       if (body.decision === "APPROVED")
         await client.query(
-          "INSERT INTO enrollments(user_id,course_id,payment_id) VALUES($1,$2,$3) ON CONFLICT(user_id,course_id) DO UPDATE SET payment_id=COALESCE(enrollments.payment_id,EXCLUDED.payment_id)",
+          `INSERT INTO enrollments(
+             user_id,course_id,payment_id,access_status,access_changed_at,access_reason
+           ) VALUES($1,$2,$3,'ACTIVE',NOW(),NULL)
+           ON CONFLICT(user_id,course_id) DO UPDATE SET
+             payment_id=EXCLUDED.payment_id,access_status='ACTIVE',
+             access_changed_at=NOW(),access_reason=NULL`,
           [payment.user_id, payment.course_id, paymentId],
         );
       else
-        await client.query("DELETE FROM enrollments WHERE payment_id=$1", [
-          paymentId,
-        ]);
+        await client.query(
+          `UPDATE enrollments SET access_status='REVOKED',access_changed_at=NOW(),
+           access_reason=$2 WHERE payment_id=$1`,
+          [paymentId, body.notes],
+        );
       await client.query("COMMIT");
       await audit(
         req.user!.id,
@@ -266,7 +287,18 @@ router.patch(
         "payment",
         paymentId,
         { from: payment.status, to: body.decision, notes: body.notes },
-      );
+      ).catch((error) => console.error("Payment revision audit failed", error));
+      await createNotification(
+        payment.user_id,
+        body.decision === "APPROVED" ? "Acceso reactivado" : "Acceso revocado",
+        body.decision === "APPROVED"
+          ? "La corrección del pago fue aprobada y el curso vuelve a estar disponible."
+          : `La decisión del pago fue corregida. Motivo: ${body.notes}`,
+        {
+          type: body.decision === "APPROVED" ? "SUCCESS" : "ERROR",
+          href: body.decision === "APPROVED" ? "/student" : "/student/courses",
+        },
+      ).catch(() => undefined);
       res.json({
         success: true,
         data: { id: paymentId, status: body.decision },

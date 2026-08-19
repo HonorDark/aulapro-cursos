@@ -76,6 +76,12 @@ export function NotificationCenter() {
           <div className="notification-list">
             {center.loading ? (
               <p className="notification-empty">Cargando notificaciones…</p>
+            ) : center.error && !center.items.length ? (
+              <div className="notification-empty" role="alert">
+                <TriangleAlert />
+                <span>{center.error}</span>
+                <button onClick={() => void center.reload()}>Reintentar</button>
+              </div>
             ) : center.items.length ? (
               center.items.map((item) => (
                 <button

@@ -1,4 +1,3 @@
-// @ts-nocheck Express 5's route-param union conflicts with validated scalar route IDs.
 import { Router } from "express";
 import { z } from "zod";
 import { query } from "../config/database";
@@ -7,14 +6,27 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/errors";
 import { audit } from "../services/audit";
 import { createRoleNotification } from "../services/notifications";
+import { httpUrl } from "../utils/validation";
 const router = Router();
+type CourseRow = {
+  title: string;
+  slug: string;
+  description: string;
+  instructor: string;
+  category_id: string | null;
+  image_url: string | null;
+  level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  price: string | number;
+  duration_minutes: number;
+  is_published: boolean;
+};
 const courseSchema = z.object({
   title: z.string().min(3),
   slug: z.string().regex(/^[a-z0-9-]+$/),
   description: z.string().min(10),
   instructor: z.string().min(2),
   categoryId: z.string().uuid().nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
+  imageUrl: httpUrl().nullable().optional(),
   level: z.enum(["BEGINNER", "INTERMEDIATE", "ADVANCED"]).default("BEGINNER"),
   price: z.coerce.number().min(0).default(0),
   durationMinutes: z.coerce.number().int().min(0).default(0),
@@ -23,7 +35,9 @@ const courseSchema = z.object({
 router.get(
   "/categories",
   asyncHandler(async (_req, res) => {
-    const { rows } = await query("SELECT * FROM categories ORDER BY name");
+    const { rows } = await query(
+      "SELECT * FROM categories WHERE is_active=true ORDER BY name",
+    );
     res.json({ success: true, data: rows });
   }),
 );
@@ -34,7 +48,7 @@ router.get(
     const category = String(req.query.category ?? "");
     const level = String(req.query.level ?? "");
     const { rows } = await query(
-      `SELECT c.*,cat.name category_name,(SELECT COUNT(*) FROM enrollments e WHERE e.course_id=c.id)::int enrollment_count,COALESCE((SELECT ROUND(AVG(r.rating)::numeric,1) FROM course_reviews r WHERE r.course_id=c.id),0) rating,(SELECT COUNT(*) FROM course_reviews r WHERE r.course_id=c.id)::int review_count FROM courses c LEFT JOIN categories cat ON cat.id=c.category_id WHERE c.is_published=true AND ($1='' OR c.title ILIKE '%'||$1||'%') AND ($2='' OR cat.slug=$2) AND ($3='' OR c.level::text=$3) ORDER BY c.created_at DESC`,
+      `SELECT c.*,cat.name category_name,(SELECT COUNT(*) FROM enrollments e WHERE e.course_id=c.id AND e.access_status='ACTIVE')::int enrollment_count,COALESCE((SELECT ROUND(AVG(r.rating)::numeric,1) FROM course_reviews r WHERE r.course_id=c.id),0) rating,(SELECT COUNT(*) FROM course_reviews r WHERE r.course_id=c.id)::int review_count FROM courses c LEFT JOIN categories cat ON cat.id=c.category_id WHERE c.is_published=true AND (cat.id IS NULL OR cat.is_active=true) AND ($1='' OR c.title ILIKE '%'||$1||'%') AND ($2='' OR cat.slug=$2) AND ($3='' OR c.level::text=$3) ORDER BY c.created_at DESC`,
       [search, category, level],
     );
     res.json({ success: true, data: rows });
@@ -75,12 +89,33 @@ router.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const { rows } = await query(
-      "SELECT c.*,cat.name category_name FROM courses c LEFT JOIN categories cat ON cat.id=c.category_id WHERE (c.id::text=$1 OR c.slug=$1) AND c.is_published=true",
+      `SELECT c.id,c.category_id,c.title,c.slug,c.description,c.instructor,
+       c.image_url,c.level,c.price,c.duration_minutes,c.modality,c.is_published,
+       c.created_at,c.updated_at,cat.name category_name
+       FROM courses c LEFT JOIN categories cat ON cat.id=c.category_id
+       WHERE (c.id::text=$1 OR c.slug=$1) AND c.is_published=true
+         AND (cat.id IS NULL OR cat.is_active=true)`,
       [req.params.id],
     );
     if (!rows[0]) throw new AppError(404, "Curso no encontrado");
     const modules = await query(
-      "SELECT m.*,COALESCE(json_agg(l ORDER BY l.position) FILTER(WHERE l.id IS NOT NULL),'[]') lessons FROM modules m LEFT JOIN lessons l ON l.module_id=m.id WHERE m.course_id=$1 GROUP BY m.id ORDER BY m.position",
+      `SELECT m.id,m.title,m.position,
+       COALESCE(
+         json_agg(
+           json_build_object(
+             'id',l.id,
+             'title',l.title,
+             'duration_minutes',l.duration_minutes,
+             'position',l.position,
+             'is_preview',l.is_preview,
+             'content',CASE WHEN l.is_preview THEN l.content ELSE NULL END,
+             'video_url',CASE WHEN l.is_preview THEN l.video_url ELSE NULL END
+           ) ORDER BY l.position
+         ) FILTER(WHERE l.id IS NOT NULL),
+         '[]'
+       ) lessons
+       FROM modules m LEFT JOIN lessons l ON l.module_id=m.id
+       WHERE m.course_id=$1 GROUP BY m.id ORDER BY m.position`,
       [(rows[0] as { id: string }).id],
     );
     res.json({ success: true, data: { ...rows[0], modules: modules.rows } });
@@ -128,30 +163,31 @@ router.put(
   authenticate,
   authorize("ADMIN", "SUPER_ADMIN"),
   asyncHandler(async (req, res) => {
+    const courseId = z.string().uuid().parse(req.params.id);
     const b = courseSchema.partial().parse(req.body);
-    const current = await query<Record<string, unknown>>(
+    const current = await query<CourseRow>(
       "SELECT * FROM courses WHERE id=$1",
-      [req.params.id],
+      [courseId],
     );
-    if (!current.rows[0]) throw new AppError(404, "Curso no encontrado");
-    const merged = { ...current.rows[0], ...b };
+    const existing = current.rows[0];
+    if (!existing) throw new AppError(404, "Curso no encontrado");
     const { rows } = await query(
       `UPDATE courses SET title=$1,slug=$2,description=$3,instructor=$4,category_id=$5,image_url=$6,level=$7,price=$8,duration_minutes=$9,is_published=$10 WHERE id=$11 RETURNING *`,
       [
-        merged.title,
-        merged.slug,
-        merged.description,
-        merged.instructor,
-        b.categoryId ?? merged.category_id,
-        b.imageUrl ?? merged.image_url,
-        merged.level,
-        merged.price,
-        b.durationMinutes ?? merged.duration_minutes,
-        b.isPublished ?? merged.is_published,
-        req.params.id,
+        b.title ?? existing.title,
+        b.slug ?? existing.slug,
+        b.description ?? existing.description,
+        b.instructor ?? existing.instructor,
+        b.categoryId === undefined ? existing.category_id : b.categoryId,
+        b.imageUrl === undefined ? existing.image_url : b.imageUrl,
+        b.level ?? existing.level,
+        b.price ?? existing.price,
+        b.durationMinutes ?? existing.duration_minutes,
+        b.isPublished ?? existing.is_published,
+        courseId,
       ],
     );
-    await audit(req.user!.id, "COURSE_UPDATED", "course", req.params.id);
+    await audit(req.user!.id, "COURSE_UPDATED", "course", courseId);
     res.json({ success: true, data: rows[0] });
   }),
 );
@@ -160,19 +196,20 @@ router.patch(
   authenticate,
   authorize("ADMIN", "SUPER_ADMIN"),
   asyncHandler(async (req, res) => {
+    const courseId = z.string().uuid().parse(req.params.id);
     const { isPublished } = z
       .object({ isPublished: z.boolean() })
       .parse(req.body);
     const { rows } = await query(
       "UPDATE courses SET is_published=$1 WHERE id=$2 RETURNING *",
-      [isPublished, req.params.id],
+      [isPublished, courseId],
     );
     if (!rows[0]) throw new AppError(404, "Curso no encontrado");
     await audit(
       req.user!.id,
       isPublished ? "COURSE_PUBLISHED" : "COURSE_UNPUBLISHED",
       "course",
-      req.params.id,
+      courseId,
     );
     if (isPublished) {
       await createRoleNotification(
@@ -256,7 +293,7 @@ router.put(
       .object({
         title: z.string().trim().min(2),
         content: z.string(),
-        videoUrl: z.string().url().nullable().optional(),
+        videoUrl: httpUrl(3000).nullable().optional(),
         durationMinutes: z.coerce.number().int().min(0),
         position: z.coerce.number().int().positive(),
         isPreview: z.boolean().default(false),

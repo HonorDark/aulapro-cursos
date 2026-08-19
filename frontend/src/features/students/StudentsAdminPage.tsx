@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  ContactRound,
   Eye,
   GraduationCap,
   Pencil,
@@ -22,9 +23,9 @@ export function StudentsAdmin() {
     const term = normalizeSearchText(query);
     return term
       ? manager.students.filter((student) =>
-          normalizeSearchText(`${student.name} ${student.email}`).includes(
-            term,
-          ),
+          normalizeSearchText(
+            `${student.name} ${student.email} ${student.phone ?? ""} ${student.document_number ?? ""} ${student.country ?? ""} ${student.city ?? ""}`,
+          ).includes(term),
         )
       : manager.students;
   }, [manager.students, query]);
@@ -33,6 +34,9 @@ export function StudentsAdmin() {
     (sum, student) => sum + student.enrollments,
     0,
   );
+  const completeProfiles = manager.students.filter(
+    (student) => student.profile_fields >= 5,
+  ).length;
 
   return (
     <DashboardLayout>
@@ -82,6 +86,14 @@ export function StudentsAdmin() {
             <strong>{enrollments}</strong>Inscripciones
           </span>
         </article>
+        <article>
+          <i className="cyan">
+            <ContactRound />
+          </i>
+          <span>
+            <strong>{completeProfiles}</strong>Perfiles completos
+          </span>
+        </article>
       </div>
       <section className="students-admin-card">
         <header>
@@ -94,7 +106,7 @@ export function StudentsAdmin() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por nombre o correo…"
+              placeholder="Buscar por nombre, CI, teléfono o ubicación…"
             />
           </label>
         </header>
@@ -106,7 +118,8 @@ export function StudentsAdmin() {
               <thead>
                 <tr>
                   <th>Estudiante</th>
-                  <th>Registro</th>
+                  <th>Contacto</th>
+                  <th>Ubicación</th>
                   <th>Inscripciones</th>
                   <th>Estado</th>
                   <th>Acciones</th>
@@ -117,15 +130,30 @@ export function StudentsAdmin() {
                   <tr key={student.id}>
                     <td>
                       <i className="student-row-avatar">
-                        {student.name.charAt(0).toUpperCase()}
+                        {student.avatar_url ? (
+                          <img src={student.avatar_url} alt="" />
+                        ) : (
+                          student.name.charAt(0).toUpperCase()
+                        )}
                       </i>
                       <span>
                         <strong>{student.name}</strong>
                         <small>{student.email}</small>
                       </span>
                     </td>
-                    <td>
-                      {new Date(student.created_at).toLocaleDateString("es")}
+                    <td className="student-contact-cell">
+                      <strong>{student.phone || "Sin teléfono"}</strong>
+                      <small>{student.document_number || "Sin CI registrado"}</small>
+                    </td>
+                    <td className="student-location-cell">
+                      {student.city || student.country ? (
+                        <>
+                          <strong>{student.city || "Sin ciudad"}</strong>
+                          <small>{student.country || "Sin país"}</small>
+                        </>
+                      ) : (
+                        <span>Sin ubicación</span>
+                      )}
                     </td>
                     <td>
                       <b className="student-enrollment-count">
@@ -179,7 +207,7 @@ export function StudentsAdmin() {
           <div className="students-admin-empty">
             <Search />
             <h3>No encontramos estudiantes</h3>
-            <p>Prueba con otro nombre o correo electrónico.</p>
+            <p>Prueba con otro nombre, correo, CI o teléfono.</p>
           </div>
         )}
       </section>

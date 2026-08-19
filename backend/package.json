@@ -7,8 +7,13 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "migrate": "tsx src/scripts/migrate.ts",
     "seed": "tsx src/scripts/seed.ts",
-    "test": "tsc --noEmit"
+    "bootstrap:super-admin": "tsx src/scripts/bootstrap-super-admin.ts",
+    "healthcheck": "tsx src/scripts/healthcheck.ts",
+    "verify:readiness": "tsx src/scripts/verify-readiness.ts",
+    "typecheck": "tsc --noEmit --incremental false -p tsconfig.json",
+    "test": "tsx --test test/critical-flows.test.ts"
   },
   "keywords": [],
   "author": "",

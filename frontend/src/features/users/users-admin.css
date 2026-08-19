@@ -1,0 +1,258 @@
+.users-admin-view {
+  display: grid;
+  gap: 16px;
+}
+
+.users-admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border: 1px solid #e1e4ed;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #fff, #f7f5ff);
+}
+
+.users-admin-head h1 {
+  margin: 5px 0 3px;
+  font-size: 30px;
+}
+
+.users-admin-head p {
+  margin: 0;
+  color: #747d94;
+  font-size: 13px;
+}
+
+.users-admin-head > button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 16px;
+  background: linear-gradient(100deg, #6941ec, #3567ef);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 9px 20px #4c3bd42c;
+}
+
+.users-admin-head > button svg {
+  width: 17px;
+}
+
+.users-admin-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.users-admin-kpis article {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e1e4ed;
+  border-radius: 13px;
+  padding: 12px 15px;
+  background: #fff;
+}
+
+.users-admin-kpis article > svg {
+  width: 42px;
+  height: 42px;
+  box-sizing: border-box;
+  border-radius: 11px;
+  padding: 10px;
+  background: #eeeaff;
+  color: #6743e7;
+}
+
+.users-admin-kpis article:nth-child(2) > svg {
+  background: #e8f2ff;
+  color: #2e70e9;
+}
+
+.users-admin-kpis article:nth-child(3) > svg {
+  background: #fff0f0;
+  color: #c44b52;
+}
+
+.users-admin-kpis span,
+.users-admin-kpis strong {
+  display: block;
+}
+
+.users-admin-kpis span {
+  color: #737d94;
+  font-size: 11px;
+}
+
+.users-admin-kpis strong {
+  color: #202842;
+  font-size: 22px;
+}
+
+.users-admin-table {
+  padding: 0;
+  overflow: auto;
+}
+
+.users-admin-table table {
+  min-width: 760px;
+}
+
+.users-admin-table select {
+  min-height: 34px;
+  border: 1px solid #dfe2eb;
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #fff;
+}
+
+.users-table-state {
+  padding: 45px !important;
+  color: #838ca1;
+  text-align: center;
+}
+
+.users-admin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #11162dc4;
+  backdrop-filter: blur(5px);
+}
+
+.users-admin-modal > form {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 13px;
+  border-radius: 18px;
+  padding: 25px;
+  background: #fff;
+  box-shadow: 0 35px 100px #080b225c;
+}
+
+.users-admin-modal header {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 4px;
+}
+
+.users-admin-modal header span {
+  color: #6542e5;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.users-admin-modal h2 {
+  margin: 5px 0 2px;
+  font-size: 25px;
+}
+
+.users-admin-modal header p {
+  margin: 0;
+  color: #7c859a;
+  font-size: 12px;
+}
+
+.users-admin-modal header button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #eff0f5;
+}
+
+.users-admin-modal header svg {
+  width: 16px;
+}
+
+.users-admin-modal label {
+  display: grid;
+  gap: 6px;
+  color: #333b54;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.users-admin-modal input {
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid #dfe2eb;
+  border-radius: 9px;
+  padding: 0 11px;
+  background: #fbfbfd;
+}
+
+.users-admin-modal input:focus {
+  outline: 0;
+  border-color: #7659e7;
+  box-shadow: 0 0 0 4px #6945e811;
+  background: #fff;
+}
+
+.users-admin-modal aside {
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #f2efff;
+  color: #6554a4;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.users-admin-modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding-top: 5px;
+}
+
+.users-admin-modal footer button {
+  min-height: 39px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 14px;
+  font-weight: 800;
+}
+
+.users-admin-modal footer button:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #6542e7;
+  color: #fff;
+}
+
+.users-admin-modal footer svg {
+  width: 15px;
+}
+
+@media (max-width: 680px) {
+  .users-admin-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .users-admin-head > button {
+    justify-content: center;
+  }
+
+  .users-admin-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .users-admin-modal > form {
+    padding: 20px;
+  }
+}

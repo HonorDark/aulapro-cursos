@@ -74,7 +74,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <span>Cerrar sesión</span>
         </button>
         <div className="user-card">
-          <div className="avatar">{user.name[0]}</div>
+          <div className="avatar">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt={`Foto de ${user.name}`} />
+            ) : (
+              user.name[0]
+            )}
+          </div>
           <div>
             <strong>{user.name}</strong>
             <small>{roleNames[user.role]}</small>
@@ -103,7 +109,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <strong>{user.name.split(" ")[0]}</strong>
                 <small>{roleNames[user.role]}</small>
               </div>
-              <span className="top-avatar">{user.name[0]}</span>
+              <span className="top-avatar">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={`Foto de ${user.name}`} />
+                ) : (
+                  user.name[0]
+                )}
+              </span>
             </div>
           </div>
         </header>

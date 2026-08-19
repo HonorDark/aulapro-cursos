@@ -1,4 +1,5 @@
 import {
+  Archive,
   BarChart3,
   CalendarDays,
   Check,
@@ -6,7 +7,10 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileQuestion,
+  ListChecks,
   Plus,
+  Pencil,
+  RotateCcw,
   Search,
   Send,
   ToggleLeft,
@@ -14,21 +18,26 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../components/Layout";
 import { api } from "../services/api";
 import type { Course } from "../types";
+import type { CourseworkItem } from "../features/coursework/types";
+import { useFeedback } from "../features/notifications/feedback-context";
 type Event = {
   id: string;
   title: string;
   description: string | null;
   type: string;
   event_date: string;
-  kind: "EVALUATION" | "SURVEY";
+  kind: "EVALUATION" | "SURVEY" | "ASSIGNMENT";
   course_id: string;
   course_title: string;
   is_published?: boolean;
   responses?: number;
   responded?: boolean;
+  max_score?: number;
+  is_archived?: boolean;
 };
 type Survey = {
   id: string;
@@ -38,12 +47,26 @@ type Survey = {
   closes_at: string;
   questions: Array<{ id: string; prompt: string; position: number }>;
 };
+type AdminSurvey = Omit<Survey, "description"> & {
+  description: string | null;
+  course_id: string;
+  is_archived: boolean;
+};
+
+const dateTimeValue = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+};
 const labels: Record<string, string> = {
   EXAM: "Examen",
   PROJECT: "Proyecto",
   PRACTICE: "Práctica",
   QUIZ: "Quiz",
-  SURVEY: "Encuesta",
+  SURVEY: "Cuestionario",
+  TASK: "Tarea",
 };
 function CalendarView({
   events,
@@ -64,13 +87,21 @@ function CalendarView({
   return (
     <section className="academic-calendar">
       <header>
-        <button onClick={() => setMonth(new Date(year, m - 1, 1))}>
+        <button
+          type="button"
+          aria-label="Mes anterior"
+          onClick={() => setMonth(new Date(year, m - 1, 1))}
+        >
           <ChevronLeft />
         </button>
         <h2>
           {month.toLocaleDateString("es", { month: "long", year: "numeric" })}
         </h2>
-        <button onClick={() => setMonth(new Date(year, m + 1, 1))}>
+        <button
+          type="button"
+          aria-label="Mes siguiente"
+          onClick={() => setMonth(new Date(year, m + 1, 1))}
+        >
           <ChevronRight />
         </button>
       </header>
@@ -124,15 +155,41 @@ function CalendarView({
   );
 }
 export function StudentCalendar() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [month, setMonth] = useState(new Date());
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
-  const load = () =>
-    api<Event[]>("/academic/student").then((r) => setEvents(r.data));
+  const load = async (signal?: AbortSignal) => {
+    const [academic, coursework] = await Promise.all([
+      api<Event[]>("/academic/student", { signal }),
+      api<CourseworkItem[]>("/coursework/student", { signal }),
+    ]);
+    if (signal?.aborted) return;
+    setEvents([
+        ...academic.data,
+        ...coursework.data
+          .filter((item) => item.kind === "ASSIGNMENT")
+          .map<Event>((item) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            type: "TASK",
+            event_date: item.due_at,
+            kind: "ASSIGNMENT",
+            course_id: item.course_id,
+            course_title: item.course_title,
+            responded: item.status !== "NOT_SUBMITTED",
+          })),
+      ]);
+  };
   useEffect(() => {
-    load().catch((e) => setMessage(e.message));
+    const controller = new AbortController();
+    void load(controller.signal).catch((error: Error) => {
+      if (error.name !== "AbortError") setMessage(error.message);
+    });
+    return () => controller.abort();
   }, []);
   const upcoming = events
     .filter((e) => new Date(e.event_date) >= new Date())
@@ -156,7 +213,7 @@ export function StudentCalendar() {
         body: JSON.stringify({ answers }),
       });
       setSurvey(null);
-      setMessage("Encuesta enviada correctamente.");
+      setMessage("Cuestionario enviado correctamente.");
       await load();
     } catch (error) {
       setMessage((error as Error).message);
@@ -168,7 +225,7 @@ export function StudentCalendar() {
         <div>
           <span>MI AGENDA</span>
           <h1>Calendario académico</h1>
-          <p>Evaluaciones, proyectos y encuestas de tus cursos.</p>
+          <p>Tareas, evaluaciones y cuestionarios de tus cursos.</p>
         </div>
         <i>
           <CalendarDays />
@@ -196,6 +253,8 @@ export function StudentCalendar() {
                 <i className={event.kind.toLowerCase()}>
                   {event.kind === "SURVEY" ? (
                     <FileQuestion />
+                  ) : event.kind === "ASSIGNMENT" ? (
+                    <ListChecks />
                   ) : (
                     <ClipboardCheck />
                   )}
@@ -215,6 +274,9 @@ export function StudentCalendar() {
                   {event.responded ? "Respondida" : "Responder"}
                 </button>
               )}
+              {event.kind !== "SURVEY" && (
+                <button onClick={() => navigate("/student/tasks")}>Abrir</button>
+              )}
             </article>
           ))}
         </aside>
@@ -224,11 +286,15 @@ export function StudentCalendar() {
           <form onSubmit={respond}>
             <header>
               <div>
-                <span>ENCUESTA DEL CURSO</span>
+                <span>CUESTIONARIO DEL CURSO</span>
                 <h2>{survey.title}</h2>
                 <p>{survey.course_title}</p>
               </div>
-              <button type="button" onClick={() => setSurvey(null)}>
+              <button
+                type="button"
+                aria-label="Cerrar cuestionario"
+                onClick={() => setSurvey(null)}
+              >
                 <X />
               </button>
             </header>
@@ -251,7 +317,7 @@ export function StudentCalendar() {
             </div>
             <button className="send-survey">
               <Send />
-              Enviar encuesta
+              Enviar cuestionario
             </button>
           </form>
         </div>
@@ -260,39 +326,67 @@ export function StudentCalendar() {
   );
 }
 export function AcademicManagement() {
+  const feedback = useFeedback();
   const [events, setEvents] = useState<Event[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [month, setMonth] = useState(new Date());
-  const [show, setShow] = useState<"EVALUATION" | "SURVEY" | null>(null);
+  const [show, setShow] = useState<
+    "ASSIGNMENT" | "EVALUATION" | "SURVEY" | null
+  >(null);
+  const [editing, setEditing] = useState<Event | null>(null);
   const [questions, setQuestions] = useState([""]);
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [eventSearch, setEventSearch] = useState("");
   const [eventFilter, setEventFilter] = useState<
-    "ALL" | "EVALUATION" | "SURVEY"
+    "ALL" | "ASSIGNMENT" | "EVALUATION" | "SURVEY"
   >("ALL");
-  const load = () =>
-    Promise.all([
-      api<Event[]>("/academic/admin"),
-      api<Course[]>("/courses/manage"),
-    ]).then(([e, c]) => {
-      setEvents(e.data);
-      setCourses(c.data);
-    });
+  const [showArchived, setShowArchived] = useState(false);
+  const load = async (signal?: AbortSignal) => {
+    const [academic, tasks, coursesResponse] = await Promise.all([
+      api<Event[]>("/academic/admin?includeArchived=true", { signal }),
+      api<Event[]>("/coursework/admin/assignments?includeArchived=true", { signal }),
+      api<Course[]>("/courses/manage", { signal }),
+    ]);
+    if (signal?.aborted) return;
+    setEvents([...academic.data, ...tasks.data]);
+    setCourses(coursesResponse.data);
+  };
   useEffect(() => {
-    load().catch((e) => setMessage(e.message));
+    const controller = new AbortController();
+    void load(controller.signal).catch((error: Error) => {
+      if (error.name !== "AbortError") setMessage(error.message);
+    });
+    return () => controller.abort();
   }, []);
-  const create = async (e: FormEvent<HTMLFormElement>) => {
+  const save = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!show) return;
     const f = new FormData(e.currentTarget);
     setFormError("");
     setSubmitting(true);
     try {
-      if (show === "EVALUATION")
-        await api("/academic/evaluations", {
-          method: "POST",
+      if (show === "ASSIGNMENT")
+        await api(
+          editing
+            ? `/coursework/admin/assignments/${editing.id}`
+            : "/coursework/admin/assignments",
+          {
+          method: editing ? "PUT" : "POST",
+          body: JSON.stringify({
+            courseId: f.get("courseId"),
+            title: f.get("title"),
+            description: f.get("description"),
+            dueAt: f.get("date"),
+            maxScore: f.get("maxScore"),
+            isPublished: true,
+          }),
+          },
+        );
+      else if (show === "EVALUATION")
+        await api(editing ? `/academic/evaluations/${editing.id}` : "/academic/evaluations", {
+          method: editing ? "PUT" : "POST",
           body: JSON.stringify({
             courseId: f.get("courseId"),
             title: f.get("title"),
@@ -303,8 +397,8 @@ export function AcademicManagement() {
           }),
         });
       else
-        await api("/academic/surveys", {
-          method: "POST",
+        await api(editing ? `/academic/surveys/${editing.id}` : "/academic/surveys", {
+          method: editing ? "PUT" : "POST",
           body: JSON.stringify({
             courseId: f.get("courseId"),
             title: f.get("title"),
@@ -315,15 +409,18 @@ export function AcademicManagement() {
           }),
         });
       setShow(null);
+      setEditing(null);
       setQuestions([""]);
-      setMessage(
-        show === "EVALUATION"
-          ? "Evaluación creada y publicada."
-          : "Encuesta creada y publicada.",
+      feedback.success(
+        editing ? "Actividad actualizada" : "Actividad creada",
+        editing
+          ? "Los cambios académicos se guardaron correctamente."
+          : "La actividad quedó publicada para los estudiantes.",
       );
       await load();
     } catch (error) {
       setFormError((error as Error).message);
+      feedback.error("No se pudo guardar", (error as Error).message);
     } finally {
       setSubmitting(false);
     }
@@ -331,7 +428,9 @@ export function AcademicManagement() {
   const publish = async (event: Event) => {
     try {
       await api(
-        `/academic/${event.kind === "SURVEY" ? "survey" : "evaluation"}/${event.id}/publish`,
+        event.kind === "ASSIGNMENT"
+          ? `/coursework/admin/assignments/${event.id}/publish`
+          : `/academic/${event.kind === "SURVEY" ? "survey" : "evaluation"}/${event.id}/publish`,
         {
           method: "PATCH",
           body: JSON.stringify({ isPublished: !event.is_published }),
@@ -342,21 +441,81 @@ export function AcademicManagement() {
           ? "Actividad despublicada correctamente."
           : "Actividad publicada correctamente.",
       );
+      feedback.success(
+        event.is_published ? "Actividad despublicada" : "Actividad publicada",
+      );
       await load();
     } catch (error) {
-      setMessage((error as Error).message);
+      feedback.error("No se pudo cambiar la publicación", (error as Error).message);
     }
   };
-  const openCreate = (kind: "EVALUATION" | "SURVEY") => {
+  const openCreate = (
+    kind: "ASSIGNMENT" | "EVALUATION" | "SURVEY",
+  ) => {
     setFormError("");
     setQuestions([""]);
+    setEditing(null);
     setShow(kind);
+  };
+  const openEdit = async (event: Event) => {
+    if (event.is_archived) return;
+    setFormError("");
+    setEditing(event);
+    if (event.kind === "SURVEY") {
+      try {
+        const response = await api<AdminSurvey>(`/academic/admin/surveys/${event.id}`);
+        setQuestions(response.data.questions.map((question) => question.prompt));
+      } catch (error) {
+        feedback.error("No se pudo abrir el cuestionario", (error as Error).message);
+        setEditing(null);
+        return;
+      }
+    } else {
+      setQuestions([""]);
+    }
+    setShow(event.kind);
+  };
+  const archive = async (event: Event) => {
+    const restoring = Boolean(event.is_archived);
+    if (!restoring) {
+      const accepted = await feedback.confirm({
+        title: "Archivar actividad",
+        message:
+          "Dejará de estar disponible para estudiantes, pero conservará todas las entregas y respuestas.",
+        confirmLabel: "Archivar",
+        tone: "danger",
+      });
+      if (!accepted) return;
+    }
+    try {
+      await api(
+        event.kind === "ASSIGNMENT"
+          ? `/coursework/admin/assignments/${event.id}/archive`
+          : `/academic/${event.kind === "SURVEY" ? "survey" : "evaluation"}/${event.id}/archive`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ isArchived: !event.is_archived }),
+        },
+      );
+      feedback.success(
+        restoring ? "Actividad restaurada" : "Actividad archivada",
+        restoring
+          ? "Puedes editarla y publicarla nuevamente."
+          : "El historial y las entregas se conservaron.",
+      );
+      await load();
+    } catch (error) {
+      feedback.error("No se pudo actualizar el archivo", (error as Error).message);
+    }
   };
   const totals = useMemo(
     () => ({
-      evaluations: events.filter((x) => x.kind === "EVALUATION").length,
-      surveys: events.filter((x) => x.kind === "SURVEY").length,
-      responses: events.reduce((s, x) => s + (x.responses ?? 0), 0),
+      assignments: events.filter((x) => x.kind === "ASSIGNMENT" && !x.is_archived).length,
+      evaluations: events.filter((x) => x.kind === "EVALUATION" && !x.is_archived).length,
+      surveys: events.filter((x) => x.kind === "SURVEY" && !x.is_archived).length,
+      responses: events
+        .filter((x) => !x.is_archived)
+        .reduce((s, x) => s + (x.responses ?? 0), 0),
     }),
     [events],
   );
@@ -364,34 +523,46 @@ export function AcademicManagement() {
     const term = eventSearch.trim().toLocaleLowerCase("es");
     return events.filter((event) => {
       const matchesType = eventFilter === "ALL" || event.kind === eventFilter;
+      const matchesArchive = Boolean(event.is_archived) === showArchived;
       const matchesSearch =
         !term ||
         `${event.title} ${event.course_title} ${labels[event.type] ?? event.type}`
           .toLocaleLowerCase("es")
           .includes(term);
-      return matchesType && matchesSearch;
+      return matchesType && matchesArchive && matchesSearch;
     });
-  }, [eventFilter, eventSearch, events]);
+  }, [eventFilter, eventSearch, events, showArchived]);
+  const editHasResponses = Boolean(editing && (editing.responses ?? 0) > 0);
   return (
     <DashboardLayout>
       <div className="academic-management-view">
         <div className="academic-page-head admin">
           <div>
             <span>GESTIÓN ACADÉMICA</span>
-            <h1>Calendario y evaluaciones</h1>
+            <h1>Calendario y actividades</h1>
             <p>
-              Programa actividades y recopila respuestas de tus estudiantes.
+              Publica tareas, evaluaciones y cuestionarios por curso.
             </p>
           </div>
           <div>
-          <button onClick={() => openCreate("SURVEY")} disabled={!courses.length}>
-              <FileQuestion />
-              Crear encuesta
+            <button
+              onClick={() => openCreate("ASSIGNMENT")}
+              disabled={!courses.length}
+            >
+              <ListChecks />
+              Crear tarea
             </button>
-          <button
-            onClick={() => openCreate("EVALUATION")}
-            disabled={!courses.length}
-          >
+            <button
+              onClick={() => openCreate("SURVEY")}
+              disabled={!courses.length}
+            >
+              <FileQuestion />
+              Crear cuestionario
+            </button>
+            <button
+              onClick={() => openCreate("EVALUATION")}
+              disabled={!courses.length}
+            >
               <Plus />
               Crear evaluación
             </button>
@@ -411,8 +582,9 @@ export function AcademicManagement() {
             {(
               [
                 ["ALL", "Todas"],
+                ["ASSIGNMENT", "Tareas"],
                 ["EVALUATION", "Evaluaciones"],
-                ["SURVEY", "Encuestas"],
+                ["SURVEY", "Cuestionarios"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -425,11 +597,33 @@ export function AcademicManagement() {
               </button>
             ))}
           </div>
+          <div className="academic-archive-filter" aria-label="Estado de archivo">
+            <button
+              type="button"
+              className={!showArchived ? "active" : ""}
+              onClick={() => setShowArchived(false)}
+            >
+              Activas
+            </button>
+            <button
+              type="button"
+              className={showArchived ? "active" : ""}
+              onClick={() => setShowArchived(true)}
+            >
+              <Archive /> Archivadas
+            </button>
+          </div>
           <span>
             <strong>{visibleEvents.length}</strong> actividades visibles
           </span>
         </section>
         <div className="academic-kpis">
+          <article>
+            <ListChecks />
+            <span>
+              <strong>{totals.assignments}</strong>Tareas
+            </span>
+          </article>
           <article>
             <ClipboardCheck />
             <span>
@@ -439,7 +633,7 @@ export function AcademicManagement() {
           <article>
             <FileQuestion />
             <span>
-              <strong>{totals.surveys}</strong>Encuestas
+              <strong>{totals.surveys}</strong>Cuestionarios
             </span>
           </article>
           <article>
@@ -458,14 +652,19 @@ export function AcademicManagement() {
           <aside className="agenda-list manage">
             <header>
               <h2>Actividades programadas</h2>
-              <span>{events.length}</span>
+              <span>{visibleEvents.length}</span>
             </header>
             {visibleEvents.slice(0, 9).map((event) => (
-              <article key={`${event.kind}-${event.id}`}>
+              <article
+                key={`${event.kind}-${event.id}`}
+                className={event.is_archived ? "archived" : ""}
+              >
                 <div>
                   <i className={event.kind.toLowerCase()}>
                     {event.kind === "SURVEY" ? (
                       <FileQuestion />
+                    ) : event.kind === "ASSIGNMENT" ? (
+                      <ListChecks />
                     ) : (
                       <ClipboardCheck />
                     )}
@@ -476,15 +675,40 @@ export function AcademicManagement() {
                       {event.course_title} ·{" "}
                       {new Date(event.event_date).toLocaleDateString("es")}
                     </small>
+                    {event.is_archived && <em>Archivada</em>}
                   </span>
                 </div>
-                <button
-                  className="publish-toggle"
-                  onClick={() => publish(event)}
-                  title={event.is_published ? "Despublicar" : "Publicar"}
-                >
-                  {event.is_published ? <ToggleRight /> : <ToggleLeft />}
-                </button>
+                <div className="academic-event-actions">
+                  {!event.is_archived && (
+                    <button
+                      type="button"
+                      onClick={() => void openEdit(event)}
+                      title="Editar actividad"
+                      aria-label={`Editar ${event.title}`}
+                    >
+                      <Pencil />
+                    </button>
+                  )}
+                  {!event.is_archived && (
+                    <button
+                      type="button"
+                      className="publish-toggle"
+                      onClick={() => publish(event)}
+                      title={event.is_published ? "Despublicar" : "Publicar"}
+                    >
+                      {event.is_published ? <ToggleRight /> : <ToggleLeft />}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={event.is_archived ? "restore" : "archive"}
+                    onClick={() => void archive(event)}
+                    title={event.is_archived ? "Restaurar" : "Archivar"}
+                    aria-label={`${event.is_archived ? "Restaurar" : "Archivar"} ${event.title}`}
+                  >
+                    {event.is_archived ? <RotateCcw /> : <Archive />}
+                  </button>
+                </div>
               </article>
             ))}
             {!visibleEvents.length && (
@@ -498,21 +722,32 @@ export function AcademicManagement() {
         </div>
         {show && (
           <div className="academic-modal">
-          <form onSubmit={create}>
+          <form onSubmit={save} key={`${show}-${editing?.id ?? "new"}`}>
               <header>
                 <div>
                   <span>
-                    {show === "EVALUATION"
-                      ? "NUEVA EVALUACIÓN"
-                      : "NUEVA ENCUESTA"}
+                    {show === "ASSIGNMENT"
+                      ? editing ? "EDITAR TAREA" : "NUEVA TAREA"
+                      : show === "EVALUATION"
+                        ? editing ? "EDITAR EVALUACIÓN" : "NUEVA EVALUACIÓN"
+                        : editing ? "EDITAR CUESTIONARIO" : "NUEVO CUESTIONARIO"}
                   </span>
                   <h2>
-                    {show === "EVALUATION"
-                      ? "Programa una evaluación"
-                      : "Crea una encuesta"}
+                    {show === "ASSIGNMENT"
+                      ? editing ? "Actualiza la tarea" : "Publica una tarea del curso"
+                      : show === "EVALUATION"
+                        ? editing ? "Actualiza la evaluación" : "Programa una evaluación"
+                        : editing ? "Actualiza el cuestionario" : "Crea un cuestionario"}
                   </h2>
                 </div>
-                <button type="button" onClick={() => setShow(null)}>
+                <button
+                  type="button"
+                  aria-label="Cerrar formulario"
+                  onClick={() => {
+                    setShow(null);
+                    setEditing(null);
+                  }}
+                >
                   <X />
                 </button>
             </header>
@@ -521,7 +756,15 @@ export function AcademicManagement() {
             )}
             <label>
                 Curso
-                <select name="courseId" required>
+                {editHasResponses && (
+                  <input type="hidden" name="courseId" value={editing!.course_id} />
+                )}
+                <select
+                  name={editHasResponses ? "courseDisplay" : "courseId"}
+                  required
+                  disabled={editHasResponses}
+                  defaultValue={editing?.course_id}
+                >
                   {courses.map((c) => (
                     <option value={c.id} key={c.id}>
                       {c.title}
@@ -531,13 +774,20 @@ export function AcademicManagement() {
               </label>
               <label>
                 Título
-              <input name="title" required minLength={3} maxLength={180} />
+              <input
+                name="title"
+                required
+                minLength={3}
+                maxLength={180}
+                defaultValue={editing?.title}
+              />
               </label>
               <label>
                 Descripción
                 <textarea
                 name="description"
                 maxLength={1000}
+                defaultValue={editing?.description ?? ""}
                   placeholder="Indicaciones para los estudiantes"
                 />
               </label>
@@ -545,7 +795,7 @@ export function AcademicManagement() {
                 {show === "EVALUATION" && (
                   <label>
                     Tipo
-                    <select name="type">
+                    <select name="type" defaultValue={editing?.type ?? "EXAM"}>
                       <option value="EXAM">Examen</option>
                       <option value="QUIZ">Quiz</option>
                       <option value="PROJECT">Proyecto</option>
@@ -553,28 +803,53 @@ export function AcademicManagement() {
                     </select>
                   </label>
                 )}
+                {show === "ASSIGNMENT" && (
+                  <label>
+                    Puntaje máximo
+                    <input
+                      name="maxScore"
+                      type="number"
+                      min="1"
+                      max="1000"
+                      defaultValue={editing?.max_score ?? 100}
+                      required
+                    />
+                  </label>
+                )}
                 <label>
-                  {show === "EVALUATION"
-                    ? "Fecha límite"
-                    : "Cierre de encuesta"}
+                  {show === "SURVEY" ? "Cierre del cuestionario" : "Fecha límite"}
                 <input
                   name="date"
                   type="datetime-local"
                   required
-                  min={new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
-                    .toISOString()
-                    .slice(0, 16)}
+                  defaultValue={dateTimeValue(editing?.event_date)}
+                  min={
+                    editing
+                      ? undefined
+                      : new Date(
+                          Date.now() - new Date().getTimezoneOffset() * 60_000,
+                        )
+                          .toISOString()
+                          .slice(0, 16)
+                  }
                 />
                 </label>
               </div>
               {show === "SURVEY" && (
                 <div className="question-builder">
-                  <strong>Preguntas</strong>
+                  <strong>Preguntas ({questions.length}/12)</strong>
+                  {editHasResponses && (
+                    <p className="academic-edit-note">
+                      Ya existen respuestas. Puedes editar título, descripción y fecha,
+                      pero conservamos el curso y las preguntas para proteger el historial.
+                    </p>
+                  )}
                   {questions.map((q, i) => (
                     <div key={i}>
                       <span>{i + 1}</span>
                       <input
                         value={q}
+                        disabled={editHasResponses}
                         onChange={(e) =>
                           setQuestions((items) =>
                             items.map((x, n) => (n === i ? e.target.value : x)),
@@ -587,8 +862,9 @@ export function AcademicManagement() {
                       />
                       {questions.length > 1 && (
                         <button
-                  type="button"
-                  disabled={questions.length >= 12}
+                          type="button"
+                          disabled={editHasResponses}
+                          aria-label={`Eliminar pregunta ${i + 1}`}
                           onClick={() =>
                             setQuestions((items) =>
                               items.filter((_, n) => n !== i),
@@ -602,10 +878,17 @@ export function AcademicManagement() {
                   ))}
                   <button
                     type="button"
-                    onClick={() => setQuestions((items) => [...items, ""])}
+                    disabled={questions.length >= 12 || editHasResponses}
+                    onClick={() =>
+                      setQuestions((items) =>
+                        items.length < 12 ? [...items, ""] : items,
+                      )
+                    }
                   >
                     <Plus />
-                    Agregar pregunta
+                    {questions.length >= 12
+                      ? "Límite de 12 preguntas"
+                      : "Agregar pregunta"}
                   </button>
                 </div>
               )}
@@ -615,7 +898,11 @@ export function AcademicManagement() {
               disabled={submitting}
             >
               <Check />
-              {submitting ? "Creando actividad..." : "Crear y publicar"}
+              {submitting
+                ? "Guardando actividad..."
+                : editing
+                  ? "Guardar cambios"
+                  : "Crear y publicar"}
               </button>
             </form>
           </div>

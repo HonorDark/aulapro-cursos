@@ -1,5 +1,7 @@
 import {
   Activity,
+  AlertTriangle,
+  Award,
   BookOpen,
   CalendarDays,
   CheckCircle2,
@@ -10,6 +12,11 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FileQuestion,
+  FolderOpen,
+  ExternalLink,
+  Info,
+  ListChecks,
   Play,
   Plus,
   ShieldCheck,
@@ -29,6 +36,18 @@ import { DashboardLayout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import type { Course, Lesson, Module } from "../types";
+import {
+  courseworkKindLabels,
+  courseworkStatusLabels,
+  type CourseworkKind,
+  type CourseworkStatus,
+} from "../features/coursework/types";
+
+function CourseActivityIcon({ kind }: { kind: CourseworkKind }) {
+  if (kind === "ASSIGNMENT") return <ListChecks />;
+  if (kind === "QUESTIONNAIRE") return <FileQuestion />;
+  return <FileText />;
+}
 type Enrollment = {
   id: string;
   course_id: string;
@@ -116,33 +135,73 @@ type Classroom = {
   modules: Module[];
 };
 type CourseOverview = {
-  evaluations: Array<{
+  modality: string;
+  activities: Array<{
     id: string;
+    kind: "ASSIGNMENT" | "EVALUATION" | "QUESTIONNAIRE";
     title: string;
     type: string;
+    description: string | null;
     due_at: string;
+    max_score: string | number | null;
+    status:
+      | "NOT_SUBMITTED"
+      | "SUBMITTED"
+      | "CHANGES_REQUESTED"
+      | "GRADED"
+      | "VERIFIED";
+    score: string | number | null;
+    feedback: string | null;
+    submitted_at: string | null;
+    reviewed_at: string | null;
+    is_overdue: boolean;
   }>;
-  activity: Array<{
+  resources: Array<{
     id: string;
-    lesson_title: string;
-    module_title: string;
-    completed_at: string;
+    title: string;
+    description: string | null;
+    resource_type: "LINK" | "PDF" | "VIDEO" | "FILE";
+    url: string;
+  }>;
+  recent: Array<{
+    id: string;
+    kind: "LESSON" | "ASSIGNMENT" | "EVALUATION" | "QUESTIONNAIRE";
+    status: string;
+    title: string;
+    detail: string;
+    happened_at: string;
+  }>;
+  grades: Array<{
+    id: string;
+    kind: "ASSIGNMENT" | "EVALUATION";
+    title: string;
+    score: string | number;
+    max_score: string | number;
+    feedback: string | null;
+    reviewed_at: string;
   }>;
 };
 export function Classroom() {
   const { courseId } = useParams();
   const [data, setData] = useState<Classroom | null>(null);
   const [overview, setOverview] = useState<CourseOverview>({
-    evaluations: [],
-    activity: [],
+    modality: "ONLINE",
+    activities: [],
+    resources: [],
+    recent: [],
+    grades: [],
   });
+  const [loadError, setLoadError] = useState("");
   const [active, setActive] = useState<Lesson | null>(null);
+  const [activeTab, setActiveTab] = useState<
+    "CONTENT" | "INFO" | "ACTIVITIES" | "RESOURCES" | "GRADES"
+  >("CONTENT");
   const [expanded, setExpanded] = useState<number[]>([1]);
   const load = useCallback(
     () =>
       Promise.all([
         api<Classroom>(`/enrollments/${courseId}/classroom`),
-        api<CourseOverview>(`/enrollments/${courseId}/overview`),
+        api<CourseOverview>(`/coursework/student/course/${courseId}`),
       ]).then(([course, extra]) => {
         setData(course.data);
         setOverview(extra.data);
@@ -157,7 +216,8 @@ export function Classroom() {
     [courseId],
   );
   useEffect(() => {
-    void load();
+    setLoadError("");
+    void load().catch((error: Error) => setLoadError(error.message));
   }, [load]);
   const lessons = useMemo(
     () => data?.modules.flatMap((m) => m.lessons) ?? [],
@@ -172,6 +232,15 @@ export function Classroom() {
   const invested = lessons
     .filter((l) => l.completed)
     .reduce((sum, l) => sum + l.duration_minutes, 0);
+  const upcomingActivities = useMemo(
+    () =>
+      overview.activities.filter(
+        (item) =>
+          new Date(item.due_at) >= new Date() &&
+          !["GRADED", "VERIFIED"].includes(item.status),
+      ),
+    [overview.activities],
+  );
   const toggle = async () => {
     if (!active) return;
     await api(`/progress/${active.id}`, {
@@ -185,6 +254,17 @@ export function Classroom() {
       items.includes(position)
         ? items.filter((x) => x !== position)
         : [...items, position],
+    );
+  if (!data && loadError)
+    return (
+      <DashboardLayout>
+        <div className="page-state course-load-error">
+          <AlertTriangle />
+          <h2>No pudimos abrir este curso</h2>
+          <p>{loadError}</p>
+          <Link to="/student">Volver a mis cursos</Link>
+        </div>
+      </DashboardLayout>
     );
   if (!data)
     return (
@@ -202,7 +282,11 @@ export function Classroom() {
         <div className="course-overview-grid">
           <main>
             <section className="course-intro">
-              <img src={data.image_url ?? ""} alt="" />
+              {data.image_url ? (
+                <img src={data.image_url} alt={`Portada de ${data.title}`} />
+              ) : (
+                <div className="course-cover-fallback"><BookOpen /></div>
+              )}
               <div>
                 <span>CURSO EN PROGRESO</span>
                 <h1>{data.title}</h1>
@@ -240,18 +324,40 @@ export function Classroom() {
                   <div>
                     <BookOpen />
                     <dt>
-                      Modalidad<dd>En línea</dd>
+                      Modalidad
+                      <dd>
+                        {overview.modality === "HYBRID"
+                          ? "Híbrida"
+                          : overview.modality === "IN_PERSON"
+                            ? "Presencial"
+                            : "En línea"}
+                      </dd>
                     </dt>
                   </div>
                 </dl>
               </div>
             </section>
             <nav className="course-tabs">
-              <button className="active">Contenido del curso</button>
-              <button>Información</button>
-              <button>Recursos</button>
-              <button>Calificaciones</button>
+              {(
+                [
+                  ["CONTENT", "Contenido"],
+                  ["INFO", "Información"],
+                  ["ACTIVITIES", `Actividades (${overview.activities.length})`],
+                  ["RESOURCES", `Recursos (${overview.resources.length})`],
+                  ["GRADES", `Calificaciones (${overview.grades.length})`],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  className={activeTab === value ? "active" : ""}
+                  onClick={() => setActiveTab(value)}
+                >
+                  {label}
+                </button>
+              ))}
             </nav>
+            {activeTab === "CONTENT" && (
+              <>
             <section className="course-content-head">
               <div>
                 <h2>Contenido del curso</h2>
@@ -328,6 +434,77 @@ export function Classroom() {
                 );
               })}
             </div>
+              </>
+            )}
+            {activeTab === "INFO" && (
+              <section className="course-tab-panel course-information-panel">
+                <header>
+                  <i><Info /></i>
+                  <div>
+                    <span>ACERCA DEL CURSO</span>
+                    <h2>{data.title}</h2>
+                  </div>
+                </header>
+                <p>{data.description}</p>
+                <div className="course-facts">
+                  <article><Users /><span><small>Instructor</small><strong>{data.instructor}</strong></span></article>
+                  <article><TrendingUp /><span><small>Nivel</small><strong>{data.level === "BEGINNER" ? "Básico" : data.level === "INTERMEDIATE" ? "Intermedio" : "Avanzado"}</strong></span></article>
+                  <article><BookOpen /><span><small>Estructura</small><strong>{data.modules.length} módulos · {lessons.length} lecciones</strong></span></article>
+                  <article><Clock3 /><span><small>Duración estimada</small><strong>{Math.floor(data.duration_minutes / 60)}h {data.duration_minutes % 60}m</strong></span></article>
+                </div>
+              </section>
+            )}
+            {activeTab === "ACTIVITIES" && (
+              <section className="course-tab-panel">
+                <div className="course-tab-heading">
+                  <div><span>TRABAJO DEL CURSO</span><h2>Tareas, evaluaciones y cuestionarios</h2></div>
+                  <Link to={`/student/tasks?course=${data.id}`}>Abrir espacio de entregas <ChevronRight /></Link>
+                </div>
+                <div className="course-activities-list">
+                  {overview.activities.map((item) => (
+                    <article key={`${item.kind}-${item.id}`}>
+                      <i className={item.kind.toLowerCase()}><CourseActivityIcon kind={item.kind} /></i>
+                      <div>
+                        <span>{courseworkKindLabels[item.kind]}</span>
+                        <h3>{item.title}</h3>
+                        <p>{item.description || "Consulta las indicaciones en el espacio de entregas."}</p>
+                      </div>
+                      <time><CalendarDays /><span><small>Fecha límite</small><strong>{new Date(item.due_at).toLocaleDateString("es-BO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</strong></span></time>
+                      <b className={`coursework-status ${item.status.toLowerCase()}`}>{courseworkStatusLabels[item.status as CourseworkStatus]}</b>
+                      <Link to={`/student/tasks?course=${data.id}`}>{item.status === "NOT_SUBMITTED" ? "Realizar" : "Ver entrega"}</Link>
+                    </article>
+                  ))}
+                  {!overview.activities.length && <div className="course-tab-empty"><ListChecks /><strong>Aún no hay actividades publicadas</strong><span>Las tareas y evaluaciones de este curso aparecerán aquí.</span></div>}
+                </div>
+              </section>
+            )}
+            {activeTab === "RESOURCES" && (
+              <section className="course-tab-panel">
+                <div className="course-tab-heading"><div><span>BIBLIOTECA DEL CURSO</span><h2>Recursos publicados</h2></div></div>
+                <div className="course-resources-list">
+                  {overview.resources.map((resource) => (
+                    <a href={resource.url} target="_blank" rel="noreferrer" key={resource.id}>
+                      <i><FolderOpen /></i>
+                      <span><small>{resource.resource_type}</small><strong>{resource.title}</strong><p>{resource.description}</p></span>
+                      <ExternalLink />
+                    </a>
+                  ))}
+                  {!overview.resources.length && <div className="course-tab-empty"><FolderOpen /><strong>No hay recursos publicados</strong><span>El material adicional del curso aparecerá aquí.</span></div>}
+                </div>
+              </section>
+            )}
+            {activeTab === "GRADES" && (
+              <section className="course-tab-panel">
+                <div className="course-tab-heading"><div><span>RESULTADOS</span><h2>Mis calificaciones</h2></div></div>
+                <div className="course-grades-list">
+                  {overview.grades.map((grade) => {
+                    const percentage = Math.round((Number(grade.score) * 100) / Math.max(Number(grade.max_score), 1));
+                    return <article key={`${grade.kind}-${grade.id}`}><i><Award /></i><div><span>{grade.kind === "ASSIGNMENT" ? "Tarea" : "Evaluación"}</span><h3>{grade.title}</h3>{grade.feedback && <p>{grade.feedback}</p>}</div><strong>{grade.score}<small>/ {grade.max_score}</small></strong><em><span style={{ width: `${Math.min(percentage, 100)}%` }} /></em></article>;
+                  })}
+                  {!overview.grades.length && <div className="course-tab-empty"><Award /><strong>Todavía no tienes calificaciones</strong><span>Los resultados aparecerán después de la revisión administrativa.</span></div>}
+                </div>
+              </section>
+            )}
           </main>
           <aside className="course-insights">
             <section className="course-progress-card">
@@ -378,21 +555,21 @@ export function Classroom() {
             </section>
             <section className="course-side-card">
               <header>
-                <h2>Próximas evaluaciones</h2>
+                <h2>Próximas actividades</h2>
                 <CalendarDays />
               </header>
-              {overview.evaluations.length ? (
-                overview.evaluations.slice(0, 4).map((item) => {
+              {upcomingActivities.length ? (
+                upcomingActivities.slice(0, 4).map((item) => {
                   const date = new Date(item.due_at);
                   return (
-                    <article key={item.id}>
-                      <i>
-                        <FileText />
+                    <article key={`${item.kind}-${item.id}`}>
+                      <i className={item.kind.toLowerCase()}>
+                        <CourseActivityIcon kind={item.kind} />
                       </i>
                       <div>
                         <strong>{item.title}</strong>
                         <span>
-                          {item.type} ·{" "}
+                          {courseworkKindLabels[item.kind]} ·{" "}
                           {date.toLocaleDateString("es", {
                             day: "numeric",
                             month: "short",
@@ -403,7 +580,10 @@ export function Classroom() {
                   );
                 })
               ) : (
-                <p className="side-empty">No hay evaluaciones próximas.</p>
+                <p className="side-empty">No hay actividades próximas.</p>
+              )}
+              {upcomingActivities.length > 0 && (
+                <Link className="course-side-link" to={`/student/tasks?course=${data.id}`}>Ver todas las actividades <ChevronRight /></Link>
               )}
             </section>
             <section className="course-side-card">
@@ -411,17 +591,17 @@ export function Classroom() {
                 <h2>Actividad reciente</h2>
                 <Activity />
               </header>
-              {overview.activity.length ? (
-                overview.activity.slice(0, 5).map((item) => (
-                  <article key={item.id}>
+              {overview.recent.length ? (
+                overview.recent.slice(0, 5).map((item) => (
+                  <article key={`${item.kind}-${item.id}`}>
                     <i className="activity">
-                      <CheckCircle2 />
+                      {item.kind === "LESSON" ? <CheckCircle2 /> : <Activity />}
                     </i>
                     <div>
-                      <strong>{item.lesson_title}</strong>
+                      <strong>{item.title}</strong>
                       <span>
-                        {item.module_title} ·{" "}
-                        {new Date(item.completed_at).toLocaleDateString("es")}
+                        {item.detail} ·{" "}
+                        {new Date(item.happened_at).toLocaleDateString("es")}
                       </span>
                     </div>
                   </article>

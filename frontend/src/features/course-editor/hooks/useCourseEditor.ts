@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../../services/api";
+import { useFeedback } from "../../notifications/feedback-context";
 import type { Course, Lesson, Module } from "../../../types";
 import type {
   CourseCategory,
@@ -9,6 +10,7 @@ import type {
 } from "../types";
 
 export function useCourseEditor(initialCourseId?: string | null) {
+  const feedback = useFeedback();
   const [courses, setCourses] = useState<Course[]>([]);
   const [course, setCourse] = useState<Course | null>(null);
   const [categories, setCategories] = useState<CourseCategory[]>([]);
@@ -58,13 +60,17 @@ export function useCourseEditor(initialCourseId?: string | null) {
     [loadCatalog, loadCourse],
   );
 
-  const run = useCallback(async (action: () => Promise<void>) => {
-    try {
-      await action();
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  }, []);
+  const run = useCallback(
+    async (action: () => Promise<void>) => {
+      try {
+        await action();
+      } catch (error) {
+        setMessage((error as Error).message);
+        feedback.error("No se pudo completar la acción", (error as Error).message);
+      }
+    },
+    [feedback],
+  );
 
   const saveCourse = (values: CourseFormValues) =>
     run(async () => {
@@ -86,6 +92,7 @@ export function useCourseEditor(initialCourseId?: string | null) {
       });
       setModuleModalOpen(false);
       setMessage("Módulo creado correctamente.");
+      feedback.success("Módulo creado", "Ya puedes agregar lecciones y contenido.");
       await refresh(course.id);
       return true;
     } catch (error) {
@@ -107,17 +114,19 @@ export function useCourseEditor(initialCourseId?: string | null) {
 
   const removeModule = (module: Module) =>
     run(async () => {
-      if (
-        !course ||
-        !window.confirm(
-          `¿Eliminar el módulo “${module.title}” y todas sus lecciones?`,
-        )
-      )
-        return;
+      if (!course) return;
+      const accepted = await feedback.confirm({
+        title: "Eliminar módulo",
+        message: `Se eliminará “${module.title}” junto con todas sus lecciones. Esta acción no se puede deshacer.`,
+        confirmLabel: "Sí, eliminar módulo",
+        tone: "danger",
+      });
+      if (!accepted) return;
       await api(`/courses/${course.id}/modules/${module.id}`, {
         method: "DELETE",
       });
       setMessage("Módulo eliminado.");
+      feedback.success("Módulo eliminado");
       await refresh(course.id);
     });
 
@@ -138,12 +147,19 @@ export function useCourseEditor(initialCourseId?: string | null) {
 
   const removeLesson = (lesson: Lesson) =>
     run(async () => {
-      if (!course || !window.confirm(`¿Eliminar la lección “${lesson.title}”?`))
-        return;
+      if (!course) return;
+      const accepted = await feedback.confirm({
+        title: "Eliminar lección",
+        message: `La lección “${lesson.title}” se eliminará definitivamente.`,
+        confirmLabel: "Sí, eliminar lección",
+        tone: "danger",
+      });
+      if (!accepted) return;
       await api(`/courses/${course.id}/lessons/${lesson.id}`, {
         method: "DELETE",
       });
       setMessage("Lección eliminada.");
+      feedback.success("Lección eliminada");
       await refresh(course.id);
     });
 

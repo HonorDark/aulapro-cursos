@@ -44,3 +44,24 @@ export type ModuleEditorProps = {
   ) => Promise<void>;
   onRemoveLesson: (lesson: Lesson) => Promise<void>;
 };
+
+export type CourseResourceType = "LINK" | "PDF" | "VIDEO" | "FILE";
+
+export type CourseResource = {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string | null;
+  resource_type: CourseResourceType;
+  url: string;
+  is_published: boolean;
+  created_at: string;
+};
+
+export type CourseResourceFormValues = {
+  title: string;
+  description: string | null;
+  resourceType: CourseResourceType;
+  url: string;
+  isPublished: boolean;
+};

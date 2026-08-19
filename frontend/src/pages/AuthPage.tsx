@@ -13,7 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { dashboardFor } from "../components/Routes";
 import { useAuth } from "../context/AuthContext";
 
@@ -24,23 +24,31 @@ const demos = [
     password: "Estudiante123!",
     icon: GraduationCap,
   },
-  {
-    label: "Administrador",
-    email: "admin@aulapro.test",
-    password: "Admin123!",
-    icon: KeyRound,
-  },
-  {
-    label: "Super Admin",
-    email: "superadmin@aulapro.test",
-    password: "SuperAdmin123!",
-    icon: LockKeyhole,
-  },
+  ...(
+    import.meta.env.DEV ||
+    import.meta.env.VITE_ENABLE_PRIVILEGED_DEMO === "true"
+      ? [
+          {
+            label: "Administrador",
+            email: "admin@aulapro.test",
+            password: "Admin123!",
+            icon: KeyRound,
+          },
+          {
+            label: "Super Admin",
+            email: "superadmin@aulapro.test",
+            password: "SuperAdmin123!",
+            icon: LockKeyhole,
+          },
+        ]
+      : []
+  ),
 ];
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -55,13 +63,37 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     try {
       const user =
         mode === "login"
-          ? await login(String(form.get("email")), String(form.get("password")))
+          ? await login(
+              String(form.get("email")),
+              String(form.get("password")),
+              form.get("remember") === "on",
+            )
           : await register(
               String(form.get("name")),
               String(form.get("email")),
               String(form.get("password")),
             );
-      navigate(dashboardFor(user.role));
+      const requested = (
+        location.state as {
+          from?: { pathname?: string; search?: string; hash?: string };
+        } | null
+      )?.from;
+      const requestedPath = requested?.pathname ?? "";
+      const roleAllowsRequestedPath =
+        requestedPath === "/profile" ||
+        (user.role === "STUDENT" &&
+          (requestedPath.startsWith("/student") ||
+            requestedPath.startsWith("/classroom"))) ||
+        (user.role === "ADMIN" && requestedPath.startsWith("/admin")) ||
+        (user.role === "SUPER_ADMIN" &&
+          (requestedPath.startsWith("/admin") ||
+            requestedPath.startsWith("/super-admin")));
+      navigate(
+        roleAllowsRequestedPath
+          ? `${requestedPath}${requested?.search ?? ""}${requested?.hash ?? ""}`
+          : dashboardFor(user.role),
+        { replace: true },
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -166,10 +198,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                 <div className="auth-input">
                   <UserRound />
                   <input
-                    name="name"
+                  name="name"
                     placeholder="Ej. Sofía Ramírez"
                     required
-                    minLength={2}
+                  minLength={2}
+                  autoComplete="name"
                   />
                 </div>
               </label>
@@ -182,7 +215,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                   name="email"
                   type="email"
                   placeholder="tu@email.com"
-                  value={demo?.email}
+                  value={demo?.email ?? ""}
                   onChange={(e) =>
                     setDemo({
                       email: e.target.value,
@@ -190,6 +223,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                     })
                   }
                   required
+                  autoComplete="email"
                 />
               </div>
             </label>
@@ -201,7 +235,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                   name="password"
                   type={visible ? "text" : "password"}
                   placeholder="Mínimo 8 caracteres"
-                  value={demo?.password}
+                  value={demo?.password ?? ""}
                   onChange={(e) =>
                     setDemo({
                       email: demo?.email ?? "",
@@ -210,6 +244,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                   }
                   required
                   minLength={mode === "register" ? 8 : 1}
+                  autoComplete={
+                    mode === "register" ? "new-password" : "current-password"
+                  }
                 />
                 <button
                   type="button"
@@ -225,23 +262,19 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             {mode === "login" && (
               <div className="auth-options">
                 <label>
-                  <input type="checkbox" />
+                  <input name="remember" type="checkbox" />
                   Recordarme
                 </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setError(
-                      "La recuperación está preparada mediante token en la API.",
-                    )
-                  }
+                <Link
+                  to="/forgot-password"
+                  state={{ email: demo?.email ?? "" }}
                 >
                   ¿Olvidaste tu contraseña?
-                </button>
+                </Link>
               </div>
             )}
             {error && (
-              <div className="auth-error" role="alert">
+              <div className="auth-error" id="auth-error" role="alert">
                 {error}
               </div>
             )}

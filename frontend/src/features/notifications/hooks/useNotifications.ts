@@ -8,9 +8,15 @@ export function useNotifications() {
     unread: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const load = useCallback(async () => {
-    const response = await api<NotificationResponse>("/notifications");
-    setData(response.data);
+    try {
+      const response = await api<NotificationResponse>("/notifications");
+      setData(response.data);
+      setError("");
+    } catch (loadError) {
+      setError((loadError as Error).message);
+    }
   }, []);
   useEffect(() => {
     void load().finally(() => setLoading(false));
@@ -18,6 +24,7 @@ export function useNotifications() {
     return () => window.clearInterval(timer);
   }, [load]);
   const read = async (id: string) => {
+    const previous = data;
     setData((current) => ({
       unread: Math.max(
         0,
@@ -28,14 +35,25 @@ export function useNotifications() {
         item.id === id ? { ...item, is_read: true } : item,
       ),
     }));
-    await api(`/notifications/${id}/read`, { method: "PATCH" });
+    try {
+      await api(`/notifications/${id}/read`, { method: "PATCH" });
+    } catch (readError) {
+      setData(previous);
+      setError((readError as Error).message);
+    }
   };
   const readAll = async () => {
+    const previous = data;
     setData((current) => ({
       unread: 0,
       items: current.items.map((item) => ({ ...item, is_read: true })),
     }));
-    await api("/notifications/read-all", { method: "PATCH" });
+    try {
+      await api("/notifications/read-all", { method: "PATCH" });
+    } catch (readError) {
+      setData(previous);
+      setError((readError as Error).message);
+    }
   };
-  return { ...data, loading, read, readAll, reload: load };
+  return { ...data, loading, error, read, readAll, reload: load };
 }

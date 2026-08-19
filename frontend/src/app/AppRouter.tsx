@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import {
   AdminRoute,
@@ -5,33 +6,143 @@ import {
   StudentRoute,
   SuperAdminRoute,
 } from "../routes";
-import { AcademicManagement, StudentCalendar } from "../pages/AcademicPages";
-import { Forbidden, Profile, UsersAdmin } from "../pages/AccountPages";
-import { AdminDashboard } from "../pages/AdminPanel";
-import { AuthPage } from "../pages/AuthPage";
-import { Catalog } from "../pages/CatalogPage";
-import { CourseEditor } from "../pages/CourseEditorPage";
-import { Classroom } from "../pages/Dashboards";
-import { CoursesAdmin } from "../features/courses/admin/CoursesAdminPage";
-import { Home } from "../pages/HomePage";
-import {
-  AdminPayments,
-  PaymentCheckout,
-  PaymentCorrections,
-} from "../pages/PaymentsPage";
-import { CourseDetail } from "../pages/PublicPages";
-import { StudentCourseExplorer } from "../pages/StudentCourseExplorer";
-import { StudentDashboard } from "../pages/StudentPanel";
-import { StudentsAdmin } from "../features/students/StudentsAdminPage";
+import { RouteLoadingFallback } from "./RouteLoadingFallback";
+
+const Home = lazy(() =>
+  import("../pages/HomePage").then((module) => ({ default: module.Home })),
+);
+const Catalog = lazy(() =>
+  import("../pages/CatalogPage").then((module) => ({
+    default: module.Catalog,
+  })),
+);
+const CourseDetail = lazy(() =>
+  import("../pages/PublicPages").then((module) => ({
+    default: module.CourseDetail,
+  })),
+);
+const AuthPage = lazy(() =>
+  import("../pages/AuthPage").then((module) => ({
+    default: module.AuthPage,
+  })),
+);
+const ForgotPasswordPage = lazy(() =>
+  import("../pages/AuthRecoveryPage").then((module) => ({
+    default: module.ForgotPasswordPage,
+  })),
+);
+const ResetPasswordPage = lazy(() =>
+  import("../pages/AuthRecoveryPage").then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+);
+const Profile = lazy(() =>
+  import("../features/profile/ProfilePage").then((module) => ({
+    default: module.Profile,
+  })),
+);
+const Forbidden = lazy(() =>
+  import("../pages/AccountPages").then((module) => ({
+    default: module.Forbidden,
+  })),
+);
+const UsersAdmin = lazy(() =>
+  import("../pages/AccountPages").then((module) => ({
+    default: module.UsersAdmin,
+  })),
+);
+const StudentDashboard = lazy(() =>
+  import("../pages/StudentPanel").then((module) => ({
+    default: module.StudentDashboard,
+  })),
+);
+const StudentCourseExplorer = lazy(() =>
+  import("../pages/StudentCourseExplorer").then((module) => ({
+    default: module.StudentCourseExplorer,
+  })),
+);
+const StudentCalendar = lazy(() =>
+  import("../pages/AcademicPages").then((module) => ({
+    default: module.StudentCalendar,
+  })),
+);
+const AcademicManagement = lazy(() =>
+  import("../pages/AcademicPages").then((module) => ({
+    default: module.AcademicManagement,
+  })),
+);
+const StudentCourseworkPage = lazy(() =>
+  import("../features/coursework/StudentCourseworkPage").then((module) => ({
+    default: module.StudentCourseworkPage,
+  })),
+);
+const PaymentCheckout = lazy(() =>
+  import("../pages/PaymentsPage").then((module) => ({
+    default: module.PaymentCheckout,
+  })),
+);
+const Classroom = lazy(() =>
+  import("../pages/Dashboards").then((module) => ({
+    default: module.Classroom,
+  })),
+);
+const AdminDashboard = lazy(() =>
+  import("../pages/AdminPanel").then((module) => ({
+    default: module.AdminDashboard,
+  })),
+);
+const CoursesAdmin = lazy(() =>
+  import("../features/courses/admin/CoursesAdminPage").then((module) => ({
+    default: module.CoursesAdmin,
+  })),
+);
+const CourseEditor = lazy(() =>
+  import("../pages/CourseEditorPage").then((module) => ({
+    default: module.CourseEditor,
+  })),
+);
+const AdminSubmissionsPage = lazy(() =>
+  import("../features/coursework/AdminSubmissionsPage").then((module) => ({
+    default: module.AdminSubmissionsPage,
+  })),
+);
+const StudentsAdmin = lazy(() =>
+  import("../features/students/StudentsAdminPage").then((module) => ({
+    default: module.StudentsAdmin,
+  })),
+);
+const AdminPayments = lazy(() =>
+  import("../pages/PaymentsPage").then((module) => ({
+    default: module.AdminPayments,
+  })),
+);
+const PaymentCorrections = lazy(() =>
+  import("../pages/PaymentsPage").then((module) => ({
+    default: module.PaymentCorrections,
+  })),
+);
+const AccountingPage = lazy(() =>
+  import("../features/accounting/AccountingPage").then((module) => ({
+    default: module.AccountingPage,
+  })),
+);
+const SystemManagementPage = lazy(() =>
+  import("../features/management/SystemManagementPage").then((module) => ({
+    default: module.SystemManagementPage,
+  })),
+);
 
 export function AppRouter() {
   return (
-    <Routes>
+    <Suspense fallback={<RouteLoadingFallback />}>
+      <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/courses" element={<Catalog />} />
       <Route path="/courses/:id" element={<CourseDetail />} />
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/register" element={<AuthPage mode="register" />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/profile" element={<Profile />} />
@@ -42,6 +153,7 @@ export function AppRouter() {
         <Route path="/student" element={<StudentDashboard />} />
         <Route path="/student/courses" element={<StudentCourseExplorer />} />
         <Route path="/student/calendar" element={<StudentCalendar />} />
+        <Route path="/student/tasks" element={<StudentCourseworkPage />} />
         <Route
           path="/student/checkout/:courseId"
           element={<PaymentCheckout />}
@@ -54,8 +166,14 @@ export function AppRouter() {
         <Route path="/admin/courses" element={<CoursesAdmin />} />
         <Route path="/admin/course-editor" element={<CourseEditor />} />
         <Route path="/admin/academic" element={<AcademicManagement />} />
+        <Route path="/admin/submissions" element={<AdminSubmissionsPage />} />
         <Route path="/admin/students" element={<StudentsAdmin />} />
         <Route path="/admin/payments" element={<AdminPayments />} />
+        <Route path="/admin/accounting" element={<AccountingPage />} />
+        <Route
+          path="/admin/enrollments"
+          element={<SystemManagementPage initialTab="enrollments" />}
+        />
       </Route>
 
       <Route element={<SuperAdminRoute />}>
@@ -65,9 +183,14 @@ export function AppRouter() {
           path="/super-admin/payment-decisions"
           element={<PaymentCorrections />}
         />
+        <Route
+          path="/super-admin/settings"
+          element={<SystemManagementPage initialTab="enrollments" />}
+        />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

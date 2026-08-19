@@ -1,0 +1,63 @@
+.admin-overview .summary-ring {
+  --summary-progress: 0deg;
+  background: conic-gradient(
+    #633ff0 0 var(--summary-progress),
+    #eaebf2 var(--summary-progress) 360deg
+  );
+}
+
+.admin-overview .course-edit-shortcut {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e1e4ed;
+  border-radius: 7px;
+  background: #fff;
+  color: #6542e5;
+}
+
+.admin-overview .course-edit-shortcut:hover {
+  border-color: #cfc5fb;
+  background: #f2efff;
+}
+
+.admin-overview .course-edit-shortcut svg {
+  width: 13px;
+}
+
+.admin-overview.is-super .academic-head {
+  position: relative;
+  overflow: hidden;
+  padding: 15px 18px;
+  border: 1px solid #ddd9f4;
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 82% 5%, #ffffff20 0 60px, transparent 61px),
+    linear-gradient(110deg, #1c2345, #3e2d9e);
+  color: #fff;
+}
+
+.admin-overview.is-super .academic-head h1 {
+  color: #fff;
+}
+
+.admin-overview.is-super .academic-head p {
+  color: #cbcce0;
+}
+
+.admin-overview.is-super .academic-primary {
+  background: #fff;
+  color: #5035cf;
+  box-shadow: 0 8px 20px #15122d32;
+}
+
+.admin-overview.is-super .academic-stats article {
+  background: linear-gradient(130deg, #fff, #faf9ff);
+}
+
+@media (max-width: 520px) {
+  .admin-overview.is-super .academic-head {
+    min-height: 118px;
+  }
+}

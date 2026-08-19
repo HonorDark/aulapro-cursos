@@ -1,5 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
-const TOKEN_KEY = "aulapro_token";
+const TOKEN_KEY = "aulaflow_token";
+const LEGACY_TOKEN_KEY = "aulapro_token";
+export const AUTH_UNAUTHORIZED_EVENT = "aulaflow:unauthorized";
 
 export type ApiResponse<T> = {
   success: boolean;
@@ -21,7 +23,7 @@ export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = sessionToken.get();
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -35,6 +37,10 @@ export async function api<T>(
     .catch(() => ({ message: "Respuesta inválida" }))) as ApiResponse<T>;
 
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      sessionToken.clear();
+      window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+    }
     throw new ApiError(
       body.message ?? "No se pudo completar la solicitud",
       response.status,
@@ -44,7 +50,22 @@ export async function api<T>(
 }
 
 export const sessionToken = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  get: () =>
+    localStorage.getItem(TOKEN_KEY) ??
+    sessionStorage.getItem(TOKEN_KEY) ??
+    localStorage.getItem(LEGACY_TOKEN_KEY) ??
+    sessionStorage.getItem(LEGACY_TOKEN_KEY),
+  set: (token: string, remember = false) => {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    sessionStorage.removeItem(LEGACY_TOKEN_KEY);
+    (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+  },
+  clear: () => {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    sessionStorage.removeItem(LEGACY_TOKEN_KEY);
+  },
 };

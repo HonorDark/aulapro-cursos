@@ -2,9 +2,15 @@ export type StudentSummary = {
   id: string;
   name: string;
   email: string;
+  avatar_url: string | null;
+  phone: string | null;
+  document_number: string | null;
+  country: string | null;
+  city: string | null;
   is_active: boolean;
   created_at: string;
   enrollments: number;
+  profile_fields: number;
 };
 
 export type StudentCourse = {
@@ -20,7 +26,9 @@ export type StudentCourse = {
 };
 
 export type StudentDetail = StudentSummary & {
-  avatar_url: string | null;
+  address: string | null;
+  birth_date: string | null;
+  bio: string | null;
   payments: number;
   courses: StudentCourse[];
 };
@@ -31,4 +39,12 @@ export type StudentUpdate = {
   name: string;
   email: string;
   isActive: boolean;
+  avatarUrl: string | null;
+  phone: string | null;
+  documentNumber: string | null;
+  country: string | null;
+  city: string | null;
+  address: string | null;
+  birthDate: string | null;
+  bio: string | null;
 };

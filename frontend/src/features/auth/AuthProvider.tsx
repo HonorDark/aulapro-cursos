@@ -5,7 +5,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, sessionToken } from "../../shared/api/client";
+import {
+  api,
+  AUTH_UNAUTHORIZED_EVENT,
+  sessionToken,
+} from "../../shared/api/client";
 import type { User } from "../../types";
 import { AuthContext, type AuthValue } from "./auth-context";
 
@@ -31,12 +35,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh]);
 
-  const authenticate = useCallback(async (path: string, payload: object) => {
+  useEffect(() => {
+    const handleUnauthorized = () => setUser(null);
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () =>
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+  }, []);
+
+  const authenticate = useCallback(async (
+    path: string,
+    payload: object,
+    remember = false,
+  ) => {
     const response = await api<{ token: string; user: User }>(path, {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    sessionToken.set(response.data.token);
+    sessionToken.set(response.data.token, remember);
     setUser(response.data.user);
     return response.data.user;
   }, []);
@@ -45,8 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       loading,
-      login: (email, password) =>
-        authenticate("/auth/login", { email, password }),
+      login: (email, password, remember) =>
+        authenticate("/auth/login", { email, password }, remember),
       register: (name, email, password) =>
         authenticate("/auth/register", { name, email, password }),
       logout: () => {

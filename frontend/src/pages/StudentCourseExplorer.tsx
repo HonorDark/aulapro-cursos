@@ -23,19 +23,38 @@ export function StudentCourseExplorer() {
   const [search, setSearch] = useState("");
   const [level, setLevel] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
     setLoading(true);
+    setError("");
     const timer = window.setTimeout(
       () =>
         api<Course[]>(
           `/courses?search=${encodeURIComponent(search)}&level=${level}`,
+          { signal: controller.signal },
         )
-          .then((r) => setCourses(r.data))
-          .finally(() => setLoading(false)),
+          .then((r) => {
+            if (active) setCourses(r.data);
+          })
+          .catch((requestError: Error) => {
+            if (active && requestError.name !== "AbortError") {
+              setError(requestError.message);
+            }
+          })
+          .finally(() => {
+            if (active) setLoading(false);
+          }),
       200,
     );
-    return () => clearTimeout(timer);
-  }, [search, level]);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [search, level, retry]);
   return (
     <DashboardLayout>
       <div className="inside-catalog-head">
@@ -58,7 +77,11 @@ export function StudentCourseExplorer() {
             placeholder="Buscar por título, profesor o habilidad…"
           />
           {search && (
-            <button onClick={() => setSearch("")}>
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Limpiar búsqueda"
+            >
               <X />
             </button>
           )}
@@ -73,7 +96,16 @@ export function StudentCourseExplorer() {
           </select>
         </div>
       </div>
-      {loading ? (
+      {error ? (
+        <div className="inside-empty" role="alert">
+          <Search />
+          <h2>No pudimos cargar el catálogo</h2>
+          <p>{error}</p>
+          <button type="button" onClick={() => setRetry((value) => value + 1)}>
+            Reintentar
+          </button>
+        </div>
+      ) : loading ? (
         <div className="inside-course-grid loading">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <article key={i} />
@@ -87,7 +119,10 @@ export function StudentCourseExplorer() {
                 className="inside-course-image"
                 to={`/courses/${course.slug}`}
               >
-                <img src={course.image_url ?? ""} alt="" />
+                <img
+                  src={course.image_url ?? ""}
+                  alt={`Portada de ${course.title}`}
+                />
                 <span>{course.category_name ?? "Curso"}</span>
                 <i>
                   <BookOpen />
@@ -144,6 +179,7 @@ export function StudentCourseExplorer() {
           <h2>No encontramos cursos</h2>
           <p>Prueba con otra búsqueda o elimina los filtros.</p>
           <button
+            type="button"
             onClick={() => {
               setSearch("");
               setLevel("");

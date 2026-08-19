@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Compass,
+  ListChecks,
   Play,
   Target,
   TrendingUp,
@@ -42,6 +43,15 @@ type StudentActivity = {
 type History = { label: string; completed: number };
 type DashboardData = {
   evaluations: Evaluation[];
+  activities: Array<{
+    id: string;
+    kind: "ASSIGNMENT" | "EVALUATION" | "QUESTIONNAIRE";
+    title: string;
+    type: string;
+    due_at: string;
+    course_title: string;
+    status: string;
+  }>;
   activity: StudentActivity[];
   history: History[];
 };
@@ -50,12 +60,15 @@ const typeLabel: Record<string, string> = {
   PROJECT: "Proyecto",
   PRACTICE: "Práctica",
   QUIZ: "Quiz",
+  TASK: "Tarea",
+  QUESTIONNAIRE: "Cuestionario",
 };
 export function StudentDashboard() {
   const { user } = useAuth();
   const [items, setItems] = useState<Enrollment[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData>({
     evaluations: [],
+    activities: [],
     activity: [],
     history: [],
   });
@@ -63,9 +76,10 @@ export function StudentDashboard() {
     Promise.all([
       api<Enrollment[]>("/enrollments/me"),
       api<DashboardData>("/student/dashboard"),
-    ]).then(([enrollments, data]) => {
+      api<DashboardData["activities"]>("/coursework/student"),
+    ]).then(([enrollments, data, coursework]) => {
       setItems(enrollments.data);
-      setDashboard(data.data);
+      setDashboard({ ...data.data, activities: coursework.data });
     });
   }, []);
   const avg = items.length
@@ -190,13 +204,13 @@ export function StudentDashboard() {
         <section className="student-card upcoming">
           <header>
             <div>
-              <h2>Próximas evaluaciones</h2>
-              <p>Datos de tu agenda</p>
+              <h2>Próximas actividades</h2>
+              <p>Tareas, evaluaciones y cuestionarios</p>
             </div>
             <CalendarDays />
           </header>
-          {dashboard.evaluations.length ? (
-            dashboard.evaluations.slice(0, 4).map((x, i) => {
+          {dashboard.activities.filter((item) => new Date(item.due_at) >= new Date() && !["GRADED", "VERIFIED"].includes(item.status)).length ? (
+            dashboard.activities.filter((item) => new Date(item.due_at) >= new Date() && !["GRADED", "VERIFIED"].includes(item.status)).slice(0, 4).map((x, i) => {
               const date = new Date(x.due_at);
               return (
                 <article key={x.id}>
@@ -212,14 +226,16 @@ export function StudentDashboard() {
                     <strong>{x.title}</strong>
                     <span>{x.course_title}</span>
                   </div>
-                  <i>{typeLabel[x.type] ?? x.type}</i>
+                  <Link className="student-activity-type" to="/student/tasks">
+                    {typeLabel[x.type] ?? x.kind}
+                  </Link>
                 </article>
               );
             })
           ) : (
             <div className="student-no-courses">
               <CalendarDays />
-              <p>No tienes evaluaciones próximas.</p>
+              <p>No tienes actividades próximas.</p>
             </div>
           )}
         </section>
@@ -306,6 +322,14 @@ export function StudentDashboard() {
               <span>
                 <strong>Editar perfil</strong>
                 <small>Actualiza tus datos</small>
+              </span>
+              <ArrowRight />
+            </Link>
+            <Link to="/student/tasks">
+              <ListChecks />
+              <span>
+                <strong>Mis entregas</strong>
+                <small>Tareas y evaluaciones</small>
               </span>
               <ArrowRight />
             </Link>

@@ -1,0 +1,27 @@
+.upcoming .student-activity-type {
+  border-radius: 999px;
+  background: #eeeaff;
+  color: #5b3bea;
+  padding: 5px 7px;
+  font-size: 7px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.upcoming article:nth-of-type(2) .student-activity-type {
+  background: #e7f1ff;
+  color: #2770ea;
+}
+
+.upcoming article:nth-of-type(3) .student-activity-type {
+  background: #e4f7f8;
+  color: #079daf;
+}
+
+@media (max-width: 480px) {
+  .upcoming .student-activity-type {
+    grid-column: 2;
+    width: max-content;
+  }
+}

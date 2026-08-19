@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "../../components/Layout";
 import { CourseDetailsForm } from "./components/CourseDetailsForm";
 import { CoursePicker } from "./components/CoursePicker";
+import { CourseResourcesManager } from "./components/CourseResourcesManager";
 import { CreateLessonModal } from "./components/CreateLessonModal";
 import { CreateModuleModal } from "./components/CreateModuleModal";
 import { ModuleEditor } from "./components/ModuleEditor";
@@ -41,6 +42,11 @@ export function CourseEditor() {
             course={editor.course}
             categories={editor.categories}
             onSubmit={editor.saveCourse}
+          />
+          <CourseResourcesManager
+            key={editor.course.id}
+            courseId={editor.course.id}
+            courseTitle={editor.course.title}
           />
           <div className="curriculum-editor-head">
             <div>

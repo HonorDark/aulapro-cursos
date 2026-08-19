@@ -1,15 +1,268 @@
-import {Router} from 'express'
-import {z} from 'zod'
-import {query} from '../config/database'
-import {authenticate,authorize} from '../middleware/auth'
-import {asyncHandler} from '../utils/asyncHandler'
-import {AppError} from '../utils/errors'
-const router=Router();router.use(authenticate)
-router.post('/lessons',authorize('ADMIN','SUPER_ADMIN'),asyncHandler(async(req,res)=>{const b=z.object({moduleId:z.string().uuid(),title:z.string().min(2),content:z.string().default(''),videoUrl:z.string().url().nullable().optional(),durationMinutes:z.number().int().min(0).default(0),position:z.number().int().positive(),isPreview:z.boolean().default(false)}).parse(req.body);const {rows}=await query('INSERT INTO lessons(module_id,title,content,video_url,duration_minutes,position,is_preview) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[b.moduleId,b.title,b.content,b.videoUrl??null,b.durationMinutes,b.position,b.isPreview]);res.status(201).json({success:true,data:rows[0]})}))
-router.post('/enrollments',authorize('STUDENT'),asyncHandler(async(req,res)=>{const {courseId}=z.object({courseId:z.string().uuid()}).parse(req.body);const course=await query('SELECT id FROM courses WHERE id=$1 AND is_published=true',[courseId]);if(!course.rows[0])throw new AppError(404,'Curso no disponible');const {rows}=await query('INSERT INTO enrollments(user_id,course_id) VALUES($1,$2) ON CONFLICT(user_id,course_id) DO UPDATE SET user_id=EXCLUDED.user_id RETURNING *',[req.user!.id,courseId]);res.status(201).json({success:true,data:rows[0]})}))
-router.get('/enrollments/me',authorize('STUDENT'),asyncHandler(async(req,res)=>{const {rows}=await query(`SELECT e.*,c.title,c.slug,c.image_url,c.instructor,COUNT(l.id)::int lesson_count,COUNT(lp.id) FILTER(WHERE lp.completed)::int completed_count,CASE WHEN COUNT(l.id)=0 THEN 0 ELSE ROUND(COUNT(lp.id) FILTER(WHERE lp.completed)*100.0/COUNT(l.id)) END::int progress FROM enrollments e JOIN courses c ON c.id=e.course_id LEFT JOIN modules m ON m.course_id=c.id LEFT JOIN lessons l ON l.module_id=m.id LEFT JOIN lesson_progress lp ON lp.lesson_id=l.id AND lp.enrollment_id=e.id WHERE e.user_id=$1 GROUP BY e.id,c.id ORDER BY e.enrolled_at DESC`,[req.user!.id]);res.json({success:true,data:rows})}))
-router.get('/enrollments/:courseId/classroom',authorize('STUDENT'),asyncHandler(async(req,res)=>{const {rows}=await query(`SELECT e.id enrollment_id,c.*,COALESCE(json_agg(json_build_object('id',m.id,'title',m.title,'position',m.position,'lessons',(SELECT COALESCE(json_agg(json_build_object('id',l.id,'title',l.title,'content',l.content,'video_url',l.video_url,'duration_minutes',l.duration_minutes,'position',l.position,'completed',EXISTS(SELECT 1 FROM lesson_progress lp WHERE lp.enrollment_id=e.id AND lp.lesson_id=l.id AND lp.completed=true)) ORDER BY l.position),'[]') FROM lessons l WHERE l.module_id=m.id)) ORDER BY m.position) FILTER(WHERE m.id IS NOT NULL),'[]') modules FROM enrollments e JOIN courses c ON c.id=e.course_id LEFT JOIN modules m ON m.course_id=c.id WHERE e.user_id=$1 AND c.id=$2 GROUP BY e.id,c.id`,[req.user!.id,req.params.courseId]);if(!rows[0])throw new AppError(403,'No estás inscrito en este curso');res.json({success:true,data:rows[0]})}))
-router.get('/enrollments/:courseId/overview',authorize('STUDENT'),asyncHandler(async(req,res)=>{const enrolled=await query('SELECT id FROM enrollments WHERE user_id=$1 AND course_id=$2',[req.user!.id,req.params.courseId]);if(!enrolled.rows[0])throw new AppError(403,'No estás inscrito en este curso');const [evaluations,activity]=await Promise.all([query(`SELECT id,title,type,due_at FROM evaluations WHERE course_id=$1 AND due_at>=NOW() ORDER BY due_at LIMIT 5`,[req.params.courseId]),query(`SELECT lp.id,lp.completed_at,l.title lesson_title,m.title module_title FROM lesson_progress lp JOIN lessons l ON l.id=lp.lesson_id JOIN modules m ON m.id=l.module_id WHERE lp.enrollment_id=$1 AND lp.completed=true ORDER BY lp.completed_at DESC NULLS LAST LIMIT 6`,[(enrolled.rows[0] as {id:string}).id])]);res.json({success:true,data:{evaluations:evaluations.rows,activity:activity.rows}})}))
-router.put('/progress/:lessonId',authorize('STUDENT'),asyncHandler(async(req,res)=>{const {completed}=z.object({completed:z.boolean()}).parse(req.body);const {rows}=await query(`INSERT INTO lesson_progress(enrollment_id,lesson_id,completed,completed_at) SELECT e.id,l.id,$3,CASE WHEN $3 THEN NOW() ELSE NULL END FROM enrollments e JOIN modules m ON m.course_id=e.course_id JOIN lessons l ON l.module_id=m.id WHERE e.user_id=$1 AND l.id=$2 ON CONFLICT(enrollment_id,lesson_id) DO UPDATE SET completed=EXCLUDED.completed,completed_at=EXCLUDED.completed_at,updated_at=NOW() RETURNING *`,[req.user!.id,req.params.lessonId,completed]);if(!rows[0])throw new AppError(403,'La lección no pertenece a uno de tus cursos');res.json({success:true,data:rows[0]})}))
-router.get('/student/dashboard',authorize('STUDENT'),asyncHandler(async(req,res)=>{const [evaluations,activity,history]=await Promise.all([query(`SELECT ev.id,ev.title,ev.type,ev.due_at,c.title course_title,COALESCE(es.status,'PENDING') status FROM evaluations ev JOIN courses c ON c.id=ev.course_id JOIN enrollments e ON e.course_id=c.id AND e.user_id=$1 LEFT JOIN evaluation_submissions es ON es.evaluation_id=ev.id AND es.user_id=$1 WHERE ev.due_at>=NOW() ORDER BY ev.due_at LIMIT 6`,[req.user!.id]),query(`SELECT lp.id,lp.completed_at,c.title course_title,l.title lesson_title FROM lesson_progress lp JOIN enrollments e ON e.id=lp.enrollment_id JOIN courses c ON c.id=e.course_id JOIN lessons l ON l.id=lp.lesson_id WHERE e.user_id=$1 AND lp.completed=true ORDER BY lp.completed_at DESC NULLS LAST LIMIT 8`,[req.user!.id]),query(`WITH months AS (SELECT generate_series(date_trunc('month',NOW())-INTERVAL '5 months',date_trunc('month',NOW()),INTERVAL '1 month') AS month_start) SELECT to_char(m.month_start,'Mon') label,COALESCE(COUNT(lp.id) FILTER(WHERE lp.completed AND e.user_id=$1),0)::int completed FROM months m LEFT JOIN lesson_progress lp ON date_trunc('month',lp.completed_at)=m.month_start LEFT JOIN enrollments e ON e.id=lp.enrollment_id GROUP BY m.month_start ORDER BY m.month_start`,[req.user!.id])]);res.json({success:true,data:{evaluations:evaluations.rows,activity:activity.rows,history:history.rows}})}))
-export default router
+import { Router } from "express";
+import { z } from "zod";
+import { pool, query } from "../config/database";
+import { authenticate, authorize } from "../middleware/auth";
+import { asyncHandler } from "../utils/asyncHandler";
+import { AppError } from "../utils/errors";
+import { httpUrl } from "../utils/validation";
+
+const router = Router();
+router.use(authenticate);
+
+router.post(
+  "/lessons",
+  authorize("ADMIN", "SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        moduleId: z.string().uuid(),
+        title: z.string().trim().min(2).max(180),
+        content: z.string().default(""),
+        videoUrl: httpUrl(3000).nullable().optional(),
+        durationMinutes: z.coerce.number().int().min(0).default(0),
+        position: z.coerce.number().int().positive(),
+        isPreview: z.boolean().default(false),
+      })
+      .parse(req.body);
+    const { rows } = await query(
+      `INSERT INTO lessons(module_id,title,content,video_url,duration_minutes,position,is_preview)
+       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [
+        body.moduleId,
+        body.title,
+        body.content,
+        body.videoUrl ?? null,
+        body.durationMinutes,
+        body.position,
+        body.isPreview,
+      ],
+    );
+    res.status(201).json({ success: true, data: rows[0] });
+  }),
+);
+
+router.post(
+  "/enrollments",
+  authorize("STUDENT"),
+  asyncHandler(async (req, res) => {
+    const { courseId } = z
+      .object({ courseId: z.string().uuid() })
+      .parse(req.body);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const courseResult = await client.query<{ id: string; price: string }>(
+        "SELECT id,price FROM courses WHERE id=$1 AND is_published=true FOR SHARE",
+        [courseId],
+      );
+      const course = courseResult.rows[0];
+      if (!course) throw new AppError(404, "Curso no disponible");
+
+      const existingEnrollment = await client.query<{ access_status: string }>(
+        `SELECT access_status FROM enrollments
+         WHERE user_id=$1 AND course_id=$2 FOR UPDATE`,
+        [req.user!.id, courseId],
+      );
+      if (existingEnrollment.rows[0]) {
+        if (existingEnrollment.rows[0].access_status === "ACTIVE") {
+          throw new AppError(409, "Ya estás inscrito en este curso");
+        }
+        throw new AppError(
+          403,
+          "Tu acceso fue suspendido o revocado; solicita la revisión de un administrador",
+        );
+      }
+
+      let paymentId: string | null = null;
+      if (Number(course.price) > 0) {
+        const payment = await client.query<{ id: string }>(
+          `SELECT id FROM payments
+           WHERE user_id=$1 AND course_id=$2 AND status='APPROVED'
+           ORDER BY reviewed_at DESC NULLS LAST,created_at DESC
+           LIMIT 1 FOR SHARE`,
+          [req.user!.id, courseId],
+        );
+        paymentId = payment.rows[0]?.id ?? null;
+        if (!paymentId) {
+          throw new AppError(
+            402,
+            "Este curso requiere un pago aprobado antes de la inscripción",
+          );
+        }
+      }
+
+      const { rows } = await client.query(
+        `INSERT INTO enrollments(
+           user_id,course_id,payment_id,access_status,access_changed_at,access_reason
+         ) VALUES($1,$2,$3,'ACTIVE',NOW(),NULL)
+         RETURNING *`,
+        [req.user!.id, courseId, paymentId],
+      );
+      await client.query("COMMIT");
+      res.status(201).json({ success: true, data: rows[0] });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+router.get(
+  "/enrollments/me",
+  authorize("STUDENT"),
+  asyncHandler(async (req, res) => {
+    const { rows } = await query(
+      `SELECT e.*,c.title,c.slug,c.image_url,c.instructor,
+       COUNT(l.id)::int lesson_count,
+       COUNT(lp.id) FILTER(WHERE lp.completed)::int completed_count,
+       CASE WHEN COUNT(l.id)=0 THEN 0
+            ELSE ROUND(COUNT(lp.id) FILTER(WHERE lp.completed)*100.0/COUNT(l.id))
+       END::int progress
+       FROM enrollments e JOIN courses c ON c.id=e.course_id
+       LEFT JOIN modules m ON m.course_id=c.id
+       LEFT JOIN lessons l ON l.module_id=m.id
+       LEFT JOIN lesson_progress lp ON lp.lesson_id=l.id AND lp.enrollment_id=e.id
+       WHERE e.user_id=$1 AND e.access_status='ACTIVE'
+       GROUP BY e.id,c.id ORDER BY e.enrolled_at DESC`,
+      [req.user!.id],
+    );
+    res.json({ success: true, data: rows });
+  }),
+);
+
+router.get(
+  "/enrollments/:courseId/classroom",
+  authorize("STUDENT"),
+  asyncHandler(async (req, res) => {
+    const { rows } = await query(
+      `SELECT e.id enrollment_id,c.*,
+       COALESCE(json_agg(json_build_object(
+         'id',m.id,'title',m.title,'position',m.position,
+         'lessons',(SELECT COALESCE(json_agg(json_build_object(
+           'id',l.id,'title',l.title,'content',l.content,'video_url',l.video_url,
+           'duration_minutes',l.duration_minutes,'position',l.position,
+           'completed',EXISTS(SELECT 1 FROM lesson_progress lp
+             WHERE lp.enrollment_id=e.id AND lp.lesson_id=l.id AND lp.completed=true)
+         ) ORDER BY l.position),'[]') FROM lessons l WHERE l.module_id=m.id)
+       ) ORDER BY m.position) FILTER(WHERE m.id IS NOT NULL),'[]') modules
+       FROM enrollments e JOIN courses c ON c.id=e.course_id
+       LEFT JOIN modules m ON m.course_id=c.id
+       WHERE e.user_id=$1 AND c.id=$2 AND e.access_status='ACTIVE'
+       GROUP BY e.id,c.id`,
+      [req.user!.id, req.params.courseId],
+    );
+    if (!rows[0])
+      throw new AppError(403, "No tienes acceso activo a este curso");
+    res.json({ success: true, data: rows[0] });
+  }),
+);
+
+router.get(
+  "/enrollments/:courseId/overview",
+  authorize("STUDENT"),
+  asyncHandler(async (req, res) => {
+    const enrolled = await query<{ id: string }>(
+      `SELECT id FROM enrollments
+       WHERE user_id=$1 AND course_id=$2 AND access_status='ACTIVE'`,
+      [req.user!.id, req.params.courseId],
+    );
+    if (!enrolled.rows[0])
+      throw new AppError(403, "No tienes acceso activo a este curso");
+    const [evaluations, activity] = await Promise.all([
+      query(
+        `SELECT id,title,type,due_at FROM evaluations
+         WHERE course_id=$1 AND due_at>=NOW() AND is_published=true
+           AND is_archived=false ORDER BY due_at LIMIT 5`,
+        [req.params.courseId],
+      ),
+      query(
+        `SELECT lp.id,lp.completed_at,l.title lesson_title,m.title module_title
+         FROM lesson_progress lp JOIN lessons l ON l.id=lp.lesson_id
+         JOIN modules m ON m.id=l.module_id
+         WHERE lp.enrollment_id=$1 AND lp.completed=true
+         ORDER BY lp.completed_at DESC NULLS LAST LIMIT 6`,
+        [enrolled.rows[0].id],
+      ),
+    ]);
+    res.json({
+      success: true,
+      data: { evaluations: evaluations.rows, activity: activity.rows },
+    });
+  }),
+);
+
+router.put(
+  "/progress/:lessonId",
+  authorize("STUDENT"),
+  asyncHandler(async (req, res) => {
+    const { completed } = z.object({ completed: z.boolean() }).parse(req.body);
+    const { rows } = await query(
+      `INSERT INTO lesson_progress(enrollment_id,lesson_id,completed,completed_at)
+       SELECT e.id,l.id,$3,CASE WHEN $3 THEN NOW() ELSE NULL END
+       FROM enrollments e JOIN modules m ON m.course_id=e.course_id
+       JOIN lessons l ON l.module_id=m.id
+       WHERE e.user_id=$1 AND l.id=$2 AND e.access_status='ACTIVE'
+       ON CONFLICT(enrollment_id,lesson_id) DO UPDATE SET
+         completed=EXCLUDED.completed,completed_at=EXCLUDED.completed_at,updated_at=NOW()
+       RETURNING *`,
+      [req.user!.id, req.params.lessonId, completed],
+    );
+    if (!rows[0])
+      throw new AppError(403, "La lección no pertenece a uno de tus cursos activos");
+    res.json({ success: true, data: rows[0] });
+  }),
+);
+
+router.get(
+  "/student/dashboard",
+  authorize("STUDENT"),
+  asyncHandler(async (req, res) => {
+    const [evaluations, activity, history] = await Promise.all([
+      query(
+        `SELECT ev.id,ev.title,ev.type,ev.due_at,c.title course_title,
+         COALESCE(es.status,'PENDING') status
+         FROM evaluations ev JOIN courses c ON c.id=ev.course_id
+         JOIN enrollments e ON e.course_id=c.id AND e.user_id=$1
+           AND e.access_status='ACTIVE'
+         LEFT JOIN evaluation_submissions es
+           ON es.evaluation_id=ev.id AND es.user_id=$1
+         WHERE ev.due_at>=NOW() AND ev.is_published=true
+           AND ev.is_archived=false ORDER BY ev.due_at LIMIT 6`,
+        [req.user!.id],
+      ),
+      query(
+        `SELECT lp.id,lp.completed_at,c.title course_title,l.title lesson_title
+         FROM lesson_progress lp JOIN enrollments e ON e.id=lp.enrollment_id
+         JOIN courses c ON c.id=e.course_id JOIN lessons l ON l.id=lp.lesson_id
+         WHERE e.user_id=$1 AND e.access_status='ACTIVE' AND lp.completed=true
+         ORDER BY lp.completed_at DESC NULLS LAST LIMIT 8`,
+        [req.user!.id],
+      ),
+      query(
+        `WITH months AS (
+           SELECT generate_series(
+             date_trunc('month',NOW())-INTERVAL '5 months',
+             date_trunc('month',NOW()),INTERVAL '1 month'
+           ) AS month_start
+         )
+         SELECT to_char(m.month_start,'Mon') label,
+         COALESCE(COUNT(lp.id) FILTER(
+           WHERE lp.completed AND e.user_id=$1 AND e.access_status='ACTIVE'
+         ),0)::int completed
+         FROM months m LEFT JOIN lesson_progress lp
+           ON date_trunc('month',lp.completed_at)=m.month_start
+         LEFT JOIN enrollments e ON e.id=lp.enrollment_id
+         GROUP BY m.month_start ORDER BY m.month_start`,
+        [req.user!.id],
+      ),
+    ]);
+    res.json({
+      success: true,
+      data: { evaluations: evaluations.rows, activity: activity.rows, history: history.rows },
+    });
+  }),
+);
+
+export default router;

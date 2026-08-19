@@ -1,10 +1,15 @@
 import {
   AlertTriangle,
   BookOpen,
+  Camera,
   CalendarDays,
   CheckCircle2,
+  CreditCard,
+  IdCard,
   Mail,
+  MapPin,
   Pencil,
+  Phone,
   Trash2,
   UserRound,
   X,
@@ -51,7 +56,72 @@ function StudentOverview({ student }: { student: StudentDetail }) {
             Fecha de registro
           </span>
         </article>
+        <article>
+          <CreditCard />
+          <span>
+            <strong>{student.payments}</strong>Pagos registrados
+          </span>
+        </article>
       </div>
+      <section className="student-profile-details">
+        <header>
+          <h3>Datos personales y contacto</h3>
+          <span>{student.profile_fields}/7 campos completos</span>
+        </header>
+        <div>
+          <article>
+            <Phone />
+            <span>
+              <small>Teléfono</small>
+              <strong>{student.phone || "No registrado"}</strong>
+            </span>
+          </article>
+          <article>
+            <IdCard />
+            <span>
+              <small>CI / Documento</small>
+              <strong>{student.document_number || "No registrado"}</strong>
+            </span>
+          </article>
+          <article>
+            <MapPin />
+            <span>
+              <small>Ubicación</small>
+              <strong>
+                {[student.city, student.country].filter(Boolean).join(", ") ||
+                  "No registrada"}
+              </strong>
+            </span>
+          </article>
+          <article>
+            <CalendarDays />
+            <span>
+              <small>Fecha de nacimiento</small>
+              <strong>
+                {student.birth_date
+                  ? new Date(
+                      `${student.birth_date.slice(0, 10)}T00:00:00`,
+                    ).toLocaleDateString("es")
+                  : "No registrada"}
+              </strong>
+            </span>
+          </article>
+        </div>
+        {(student.address || student.bio) && (
+          <footer>
+            {student.address && (
+              <p>
+                <strong>Dirección:</strong> {student.address}
+              </p>
+            )}
+            {student.bio && (
+              <p>
+                <strong>Acerca del estudiante:</strong> {student.bio}
+              </p>
+            )}
+          </footer>
+        )}
+      </section>
       <section className="student-course-list">
         <header>
           <h3>Cursos y progreso</h3>
@@ -91,6 +161,15 @@ function StudentEditForm({
   onUpdate: (values: StudentUpdate) => Promise<void>;
 }) {
   const [active, setActive] = useState(student.is_active);
+  const [avatar, setAvatar] = useState(student.avatar_url);
+  const chooseAvatar = (file?: File) => {
+    if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type))
+      return;
+    if (file.size > 1.5 * 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = () => setAvatar(String(reader.result));
+    reader.readAsDataURL(file);
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -98,10 +177,40 @@ function StudentEditForm({
       name: String(data.get("name") ?? ""),
       email: String(data.get("email") ?? ""),
       isActive: active,
+      avatarUrl: avatar,
+      phone: String(data.get("phone") ?? "") || null,
+      documentNumber: String(data.get("documentNumber") ?? "") || null,
+      country: String(data.get("country") ?? "") || null,
+      city: String(data.get("city") ?? "") || null,
+      address: String(data.get("address") ?? "") || null,
+      birthDate: String(data.get("birthDate") ?? "") || null,
+      bio: String(data.get("bio") ?? "") || null,
     });
   };
   return (
     <form className="student-edit-form" onSubmit={submit}>
+      <div className="student-avatar-editor">
+        <i>
+          {avatar ? (
+            <img src={avatar} alt={`Foto de ${student.name}`} />
+          ) : (
+            student.name.charAt(0).toUpperCase()
+          )}
+        </i>
+        <span>
+          <strong>Foto de perfil</strong>
+          <small>JPG, PNG o WEBP · máximo 1.5 MB</small>
+        </span>
+        <label>
+          <Camera /> Cambiar foto
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => chooseAvatar(event.target.files?.[0])}
+          />
+        </label>
+      </div>
+      <div className="student-edit-grid">
       <label>
         Nombre completo
         <div>
@@ -126,6 +235,85 @@ function StudentEditForm({
           />
         </div>
       </label>
+      <label>
+        Número de teléfono
+        <div>
+          <Phone />
+          <input
+            name="phone"
+            type="tel"
+            defaultValue={student.phone ?? ""}
+            maxLength={30}
+            placeholder="+591 70000000"
+          />
+        </div>
+      </label>
+      <label>
+        CI / Documento
+        <div>
+          <IdCard />
+          <input
+            name="documentNumber"
+            defaultValue={student.document_number ?? ""}
+            maxLength={40}
+          />
+        </div>
+      </label>
+      <label>
+        País
+        <div>
+          <MapPin />
+          <input
+            name="country"
+            defaultValue={student.country ?? ""}
+            maxLength={80}
+          />
+        </div>
+      </label>
+      <label>
+        Ciudad
+        <div>
+          <MapPin />
+          <input
+            name="city"
+            defaultValue={student.city ?? ""}
+            maxLength={100}
+          />
+        </div>
+      </label>
+      <label>
+        Fecha de nacimiento
+        <div>
+          <CalendarDays />
+          <input
+            name="birthDate"
+            type="date"
+            defaultValue={student.birth_date?.slice(0, 10) ?? ""}
+            max={new Date().toISOString().slice(0, 10)}
+          />
+        </div>
+      </label>
+      <label className="student-edit-wide">
+        Dirección
+        <div>
+          <MapPin />
+          <input
+            name="address"
+            defaultValue={student.address ?? ""}
+            maxLength={220}
+          />
+        </div>
+      </label>
+      <label className="student-edit-wide">
+        Acerca del estudiante
+        <textarea
+          name="bio"
+          defaultValue={student.bio ?? ""}
+          maxLength={500}
+          placeholder="Información académica o personal relevante"
+        />
+      </label>
+      </div>
       <label className="student-status-switch">
         <span>
           <strong>Acceso a la plataforma</strong>
@@ -170,7 +358,11 @@ export function StudentDialog({
       >
         <header>
           <div className="student-dialog-avatar">
-            {student.name.charAt(0).toUpperCase()}
+            {student.avatar_url ? (
+              <img src={student.avatar_url} alt="" />
+            ) : (
+              student.name.charAt(0).toUpperCase()
+            )}
           </div>
           <div>
             <span>

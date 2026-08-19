@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../../shared/api/client";
+import { useFeedback } from "../../notifications/feedback-context";
 import type {
   StudentDetail,
   StudentDialogMode,
@@ -8,6 +9,7 @@ import type {
 } from "../types";
 
 export function useStudents() {
+  const feedback = useFeedback();
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [selected, setSelected] = useState<StudentDetail | null>(null);
   const [mode, setMode] = useState<StudentDialogMode | null>(null);
@@ -38,6 +40,7 @@ export function useStudents() {
       setSelected(response.data);
     } catch (error) {
       setMessage((error as Error).message);
+      feedback.error("No se pudo abrir el expediente", (error as Error).message);
       setMode(null);
     } finally {
       setDialogLoading(false);
@@ -57,10 +60,15 @@ export function useStudents() {
         body: JSON.stringify(values),
       });
       setMessage(`Los datos de ${values.name} fueron actualizados.`);
+      feedback.success(
+        "Estudiante actualizado",
+        `Los datos de ${values.name} fueron guardados.`,
+      );
       close();
       await load();
     } catch (error) {
       setMessage((error as Error).message);
+      feedback.error("No se pudo actualizar", (error as Error).message);
     }
   };
 
@@ -71,10 +79,15 @@ export function useStudents() {
       setMessage(
         `La cuenta de ${selected.name} fue desactivada. Sus datos se conservaron.`,
       );
+      feedback.warning(
+        "Cuenta desactivada",
+        `Los datos y el progreso de ${selected.name} se conservaron.`,
+      );
       close();
       await load();
     } catch (error) {
       setMessage((error as Error).message);
+      feedback.error("No se pudo desactivar la cuenta", (error as Error).message);
     }
   };
 

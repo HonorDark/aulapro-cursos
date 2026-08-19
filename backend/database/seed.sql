@@ -1,3 +1,6 @@
+SET client_encoding = 'UTF8';
+
+-- Datos exclusivamente para demostración local. No ejecutar en una instancia pública.
 -- Idempotente: puede ejecutarse nuevamente sin duplicar datos.
 INSERT INTO users(name,email,password_hash,role) VALUES
 ('Sofía Estudiante','student@aulapro.test','$2b$12$7h/7jJCHTtiuZKgPSEdJdOtNen5hYgG.c7OVxD1/wJWyL87pkBN/G','STUDENT'),
@@ -34,6 +37,19 @@ INSERT INTO lessons(module_id,title,content,video_url,duration_minutes,position,
 SELECT m.id,CASE p WHEN 1 THEN 'Conceptos esenciales' WHEN 2 THEN 'Práctica guiada' ELSE 'Reto del módulo' END,
 'Material práctico y recursos descargables para consolidar lo aprendido.','https://www.youtube.com/embed/dQw4w9WgXcQ',18,p,p=1
 FROM modules m CROSS JOIN generate_series(1,3) p ON CONFLICT(module_id,position) DO NOTHING;
+
+INSERT INTO course_resources(course_id,title,description,resource_type,url,is_published,created_by)
+SELECT c.id,v.title,v.description,v.resource_type,v.url,true,a.id
+FROM (VALUES
+ ('react-typescript','Guía oficial de React','Referencia para componentes, estado y efectos.','LINK','https://react.dev/learn'),
+ ('react-typescript','Manual de TypeScript','Documentación del lenguaje y sistema de tipos.','LINK','https://www.typescriptlang.org/docs/'),
+ ('ux-ui','Fundamentos de accesibilidad web','Buenas prácticas para diseñar productos inclusivos.','LINK','https://www.w3.org/WAI/fundamentals/accessibility-intro/'),
+ ('marketing-datos','Guía de analítica digital','Conceptos y métricas para medir campañas.','LINK','https://support.google.com/analytics/'),
+ ('liderazgo-agil','Guía de Scrum','Marco de referencia para trabajo ágil en equipo.','PDF','https://scrumguides.org/docs/scrumguide/v2020/2020-Scrum-Guide-Spanish-Latin-South-American.pdf')
+) v(slug,title,description,resource_type,url)
+JOIN courses c ON c.slug=v.slug CROSS JOIN users a
+WHERE a.email='admin@aulapro.test'
+  AND NOT EXISTS(SELECT 1 FROM course_resources r WHERE r.course_id=c.id AND r.title=v.title);
 
 INSERT INTO enrollments(user_id,course_id)
 SELECT u.id,c.id FROM users u JOIN courses c ON c.slug IN ('react-typescript','ux-ui','marketing-datos','liderazgo-agil') WHERE u.email='student@aulapro.test'
@@ -89,6 +105,33 @@ FROM (VALUES ('Quiz de fundamentos React',92::numeric),('Evaluación de fundamen
 JOIN evaluations ev ON ev.title=v.title CROSS JOIN users u WHERE u.email='student@aulapro.test'
 ON CONFLICT(evaluation_id,user_id) DO UPDATE SET status='GRADED',score=EXCLUDED.score,submitted_at=EXCLUDED.submitted_at;
 
+-- Tareas del flujo académico: pendientes, en revisión, con cambios y calificadas.
+INSERT INTO assignments(course_id,title,description,due_at,max_score,is_published,created_by)
+SELECT c.id,v.title,v.description,NOW()+v.days*INTERVAL '1 day',v.max_score,true,a.id
+FROM (VALUES
+ ('react-typescript','Diseño de componente reutilizable','Construye un componente tipado, documenta sus props y explica las decisiones de diseño.',5,100::numeric),
+ ('react-typescript','Auditoría de accesibilidad','Revisa una interfaz y entrega un informe con al menos cinco mejoras priorizadas.',9,80::numeric),
+ ('ux-ui','Mapa de experiencia del usuario','Representa el recorrido principal, puntos de dolor y oportunidades del producto.',6,100::numeric),
+ ('marketing-datos','Brief de campaña medible','Define audiencia, objetivo, canales y métricas de éxito para una campaña.',15,60::numeric),
+ ('liderazgo-agil','Plan de retrospectiva','Diseña una retrospectiva accionable para un equipo de cinco personas.',-4,100::numeric)
+) v(slug,title,description,days,max_score)
+JOIN courses c ON c.slug=v.slug CROSS JOIN users a
+WHERE a.email='admin@aulapro.test'
+  AND NOT EXISTS(SELECT 1 FROM assignments x WHERE x.course_id=c.id AND x.title=v.title);
+
+INSERT INTO assignment_submissions(assignment_id,user_id,answer_text,status,score,feedback,submitted_at,reviewed_at,reviewed_by)
+SELECT a.id,u.id,v.answer,v.status,v.score,v.feedback,NOW()-v.submitted_hours*INTERVAL '1 hour',
+ CASE WHEN v.status='SUBMITTED' THEN NULL ELSE NOW()-INTERVAL '3 hours' END,
+ CASE WHEN v.status='SUBMITTED' THEN NULL ELSE reviewer.id END
+FROM (VALUES
+ ('Diseño de componente reutilizable','Preparé el componente Card con variantes, estados de foco y documentación de sus props.','SUBMITTED',NULL::numeric,NULL,5),
+ ('Mapa de experiencia del usuario','Adjunto el análisis del recorrido de compra y los principales puntos de fricción.','CHANGES_REQUESTED',NULL::numeric,'Agrega evidencia de las entrevistas y prioriza las oportunidades antes de reenviar.',28),
+ ('Plan de retrospectiva','Propuse una dinámica de apertura, recopilación, votación y seguimiento de acuerdos.','GRADED',94::numeric,'Muy buena estructura y acciones claramente asignadas.',120)
+) v(title,answer,status,score,feedback,submitted_hours)
+JOIN assignments a ON a.title=v.title CROSS JOIN users u CROSS JOIN users reviewer
+WHERE u.email='student@aulapro.test' AND reviewer.email='admin@aulapro.test'
+ON CONFLICT(assignment_id,user_id) DO NOTHING;
+
 INSERT INTO surveys(course_id,title,description,closes_at,is_published,created_by)
 SELECT c.id,v.title,v.description,NOW()+v.days*INTERVAL '1 day',true,a.id FROM (VALUES
  ('react-typescript','Encuesta de experiencia del módulo','Cuéntanos qué tan claro y útil resultó el contenido.',12),
@@ -100,6 +143,17 @@ SELECT s.id,q.prompt,q.position FROM surveys s CROSS JOIN (VALUES
  ('¿Qué fue lo más útil de este módulo?',1),('¿Qué contenido te gustaría reforzar?',2),('¿Cómo calificarías la claridad de las lecciones?',3)
 ) q(prompt,position) WHERE s.title IN ('Encuesta de experiencia del módulo','Retroalimentación del proyecto UX')
 ON CONFLICT(survey_id,position) DO NOTHING;
+
+INSERT INTO survey_responses(survey_id,user_id,answers,status,submitted_at)
+SELECT s.id,u.id,jsonb_object_agg(q.id::text,
+ CASE q.position WHEN 1 THEN 'Los ejemplos prácticos y el proyecto guiado.'
+                 WHEN 2 THEN 'Me gustaría reforzar pruebas y manejo de errores.'
+                 ELSE 'La claridad fue muy buena y pude seguir el ritmo.' END),
+ 'SUBMITTED',NOW()-INTERVAL '8 hours'
+FROM surveys s JOIN survey_questions q ON q.survey_id=s.id CROSS JOIN users u
+WHERE s.title='Encuesta de experiencia del módulo' AND u.email='student@aulapro.test'
+GROUP BY s.id,u.id
+ON CONFLICT(survey_id,user_id) DO NOTHING;
 
 INSERT INTO course_reviews(course_id,user_id,rating,comment)
 SELECT c.id,u.id,v.rating,v.comment FROM (VALUES ('react-typescript',5,'Excelente contenido práctico'),('ux-ui',5,'Muy claro y aplicable')) v(slug,rating,comment)
@@ -119,6 +173,54 @@ INSERT INTO payment_settings(id,bank_name,account_holder,account_number,account_
 VALUES(1,'Banco Nacional de Bolivia','AulaFlow Educación','100-2345678','Caja de ahorro','BOB','Incluye el nombre del estudiante y el curso en la referencia de la transferencia.')
 ON CONFLICT(id) DO NOTHING;
 UPDATE payment_settings SET qr_image_url='/aulaflow-payment-qr.png' WHERE id=1 AND (qr_image_url IS NULL OR qr_image_url='');
+
+-- Toda inscripción a un curso pago del estudiante demo queda respaldada por
+-- un pago aprobado. La inscripción gratuita conserva payment_id en NULL.
+INSERT INTO payments(
+ user_id,course_id,amount,status,payer_name,reference,paid_at,
+ receipt_data,receipt_mime,review_notes,reviewed_by,reviewed_at
+)
+SELECT u.id,c.id,c.price,'APPROVED','Sofía Estudiante',
+ 'DEMO-'||UPPER(REPLACE(c.slug,'-','_')),
+ NOW()-INTERVAL '30 days',
+ 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCIgcng9IjI0IiBmaWxsPSIjZjdmOGZjIi8+PHRleHQgeD0iMzIwIiB5PSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIzMiIgZmlsbD0iIzY4NDVlZSI+QXVsYUZsb3c8L3RleHQ+PHRleHQgeD0iMzIwIiB5PSIyMzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzE3MWQzYiI+UGFnbyBkZSBkZW1vc3RyYWNpw7NuIGFwcm9iYWRvPC90ZXh0Pjwvc3ZnPg==',
+ 'image/svg+xml','Pago generado por el seed local de demostración.',a.id,
+ NOW()-INTERVAL '30 days'+INTERVAL '20 minutes'
+FROM enrollments e
+JOIN users u ON u.id=e.user_id
+JOIN courses c ON c.id=e.course_id
+CROSS JOIN users a
+WHERE u.email='student@aulapro.test'
+  AND a.email='admin@aulapro.test'
+  AND c.price>0
+  AND NOT EXISTS(
+    SELECT 1 FROM payments p
+    WHERE p.user_id=u.id AND p.course_id=c.id AND p.status='APPROVED'
+  );
+
+UPDATE enrollments e
+SET payment_id=(
+      SELECT p.id FROM payments p
+      WHERE p.user_id=e.user_id AND p.course_id=e.course_id AND p.status='APPROVED'
+      ORDER BY p.reviewed_at DESC NULLS LAST,p.created_at DESC
+      LIMIT 1
+    ),
+    access_status='ACTIVE',
+    access_changed_at=NOW(),
+    access_reason='Pago aprobado para la demostración local.'
+FROM users u,courses c
+WHERE e.user_id=u.id AND e.course_id=c.id
+  AND u.email='student@aulapro.test' AND c.price>0
+  AND EXISTS(
+    SELECT 1 FROM payments p
+    WHERE p.user_id=e.user_id AND p.course_id=e.course_id AND p.status='APPROVED'
+  );
+
+UPDATE enrollments e
+SET access_status='ACTIVE',access_changed_at=NOW(),access_reason='Curso gratuito.'
+FROM users u,courses c
+WHERE e.user_id=u.id AND e.course_id=c.id
+  AND u.email='student@aulapro.test' AND c.price=0;
 
 -- Pago pendiente visible al ingresar al módulo administrativo Pagos.
 INSERT INTO payments(user_id,course_id,amount,status,payer_name,reference,paid_at,receipt_data,receipt_mime)

@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { DashboardLayout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../features/notifications/feedback-context";
 import { api } from "../services/api";
 import type { Course } from "../types";
 
@@ -57,6 +58,7 @@ const statusText = {
 export function PaymentCheckout() {
   const { courseId } = useParams();
   const { user } = useAuth();
+  const feedback = useFeedback();
   const [course, setCourse] = useState<Course | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [existing, setExisting] = useState<Payment | null>(null);
@@ -90,10 +92,20 @@ export function PaymentCheckout() {
       !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(
         file.type,
       )
-    )
+    ) {
+      feedback.warning(
+        "Formato no permitido",
+        "Sube una imagen JPG, PNG, WEBP o un PDF.",
+      );
       return setMessage("Sube una imagen JPG, PNG, WEBP o un PDF.");
-    if (file.size > 5 * 1024 * 1024)
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      feedback.warning(
+        "Archivo demasiado grande",
+        "El comprobante no puede superar 5 MB.",
+      );
       return setMessage("El comprobante no puede superar 5 MB.");
+    }
     const reader = new FileReader();
     reader.onload = () =>
       setReceipt({
@@ -105,8 +117,13 @@ export function PaymentCheckout() {
   };
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!receipt || !course)
+    if (!receipt || !course) {
+      feedback.warning(
+        "Falta el comprobante",
+        "Adjunta el archivo antes de enviar el pago.",
+      );
       return setMessage("Debes adjuntar el comprobante de pago.");
+    }
     const form = new FormData(e.currentTarget);
     setSending(true);
     try {
@@ -130,8 +147,13 @@ export function PaymentCheckout() {
         review_notes: null,
       });
       setMessage("Comprobante enviado. Un administrador verificará el pago.");
+      feedback.success(
+        "Comprobante enviado",
+        "Un administrador verificará tu pago y te notificará la decisión.",
+      );
     } catch (error) {
       setMessage((error as Error).message);
+      feedback.error("No se pudo enviar el pago", (error as Error).message);
     } finally {
       setSending(false);
     }
@@ -362,6 +384,7 @@ export function PaymentCheckout() {
 }
 
 export function AdminPayments() {
+  const feedback = useFeedback();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<Payment | null>(null);
@@ -370,13 +393,12 @@ export function AdminPayments() {
     receipt_mime: string;
   } | null>(null);
   const [notes, setNotes] = useState("");
-  const [message, setMessage] = useState("");
   const [modalError, setModalError] = useState("");
   const load = () =>
     api<Payment[]>("/payments/admin").then((r) => setPayments(r.data));
   useEffect(() => {
-    load().catch((e) => setMessage(e.message));
-  }, []);
+    load().catch((e) => feedback.error("No se pudieron cargar los pagos", e.message));
+  }, [feedback]);
   const totals = useMemo(
     () => ({
       pending: payments.filter((x) => x.status === "PENDING").length,
@@ -404,12 +426,18 @@ export function AdminPayments() {
       setReceipt(r.data);
     } catch (e) {
       setModalError((e as Error).message);
+      feedback.error("No se pudo abrir el comprobante", (e as Error).message);
     }
   };
   const review = async (decision: "APPROVED" | "REJECTED") => {
     if (!selected) return;
-    if (decision === "REJECTED" && notes.trim().length < 3)
+    if (decision === "REJECTED" && notes.trim().length < 3) {
+      feedback.warning(
+        "Motivo obligatorio",
+        "Escribe el motivo del rechazo antes de continuar.",
+      );
       return setModalError("Escribe el motivo del rechazo antes de continuar.");
+    }
     setModalError("");
     try {
       await api(`/payments/admin/${selected.id}/review`, {
@@ -419,19 +447,23 @@ export function AdminPayments() {
       setSelected(null);
       setReceipt(null);
       setFilter("");
-      setMessage(
-        decision === "APPROVED"
-          ? "Pago aprobado e inscripción habilitada. El registro permanece en el historial."
-          : "Pago rechazado. El registro permanece en el historial.",
-      );
+      if (decision === "APPROVED") {
+        feedback.success(
+          "Pago aprobado",
+          "La inscripción fue habilitada y el registro quedó en el historial.",
+        );
+      } else {
+        feedback.warning(
+          "Pago rechazado",
+          "El estudiante recibirá el motivo y el registro seguirá en el historial.",
+        );
+      }
       await load();
     } catch (e) {
       setModalError((e as Error).message);
+      feedback.error("No se pudo revisar el pago", (e as Error).message);
     }
   };
-  useEffect(() => {
-    if (modalError) window.alert(modalError);
-  }, [modalError]);
   return (
     <DashboardLayout>
       <div className="admin-pay-head">
@@ -455,7 +487,6 @@ export function AdminPayments() {
           </span>
         </div>
       </div>
-      {message && <div className="payment-message admin">{message}</div>}
       <div className="payment-tabs">
         <button
           className={filter === "" ? "active" : ""}
@@ -595,6 +626,12 @@ export function AdminPayments() {
                     placeholder="Opcional al aprobar, obligatorio al rechazar"
                   />
                 </label>
+                {modalError && (
+                  <div className="receipt-modal-error" role="alert">
+                    <AlertCircle />
+                    <span>{modalError}</span>
+                  </div>
+                )}
                 <footer>
                   <button className="reject" onClick={() => review("REJECTED")}>
                     Rechazar pago
@@ -622,35 +659,46 @@ export function AdminPayments() {
 }
 
 export function PaymentCorrections() {
+  const feedback = useFeedback();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selected, setSelected] = useState<Payment | null>(null);
   const [notes, setNotes] = useState("");
-  const [message, setMessage] = useState("");
+  const [correctionError, setCorrectionError] = useState("");
   const load = () =>
     api<Payment[]>("/payments/admin").then((r) =>
       setPayments(r.data.filter((x) => x.status !== "PENDING")),
     );
   useEffect(() => {
-    load().catch((e) => setMessage(e.message));
-  }, []);
+    load().catch((e) =>
+      feedback.error("No se pudieron cargar los pagos", e.message),
+    );
+  }, [feedback]);
   const change = async () => {
     if (!selected) return;
-    if (notes.trim().length < 3)
-      return setMessage("Debes explicar el motivo de la corrección.");
+    if (notes.trim().length < 3) {
+      setCorrectionError("Debes explicar el motivo de la corrección.");
+      return feedback.warning(
+        "Motivo obligatorio",
+        "Explica por qué estás corrigiendo esta decisión.",
+      );
+    }
+    setCorrectionError("");
     const decision = selected.status === "APPROVED" ? "REJECTED" : "APPROVED";
     try {
       await api(`/payments/admin/${selected.id}/revise`, {
         method: "PATCH",
         body: JSON.stringify({ decision, notes }),
       });
-      setMessage(
-        `Pago cambiado a ${statusText[decision].toLowerCase()}. La acción quedó auditada.`,
+      feedback.success(
+        "Decisión actualizada",
+        `El pago cambió a ${statusText[decision].toLowerCase()} y la acción quedó auditada.`,
       );
       setSelected(null);
       setNotes("");
       await load();
     } catch (e) {
-      setMessage((e as Error).message);
+      setCorrectionError((e as Error).message);
+      feedback.error("No se pudo corregir el pago", (e as Error).message);
     }
   };
   return (
@@ -673,7 +721,6 @@ export function PaymentCorrections() {
           </span>
         </div>
       </div>
-      {message && <div className="payment-message admin">{message}</div>}
       <section className="payments-table correction-table">
         <header className="payments-list-head">
           <div>
@@ -713,7 +760,7 @@ export function PaymentCorrections() {
                     onClick={() => {
                       setSelected(p);
                       setNotes("");
-                      setMessage("");
+                      setCorrectionError("");
                     }}
                   >
                     Corregir decisión
@@ -747,6 +794,12 @@ export function PaymentCorrections() {
                 placeholder="Describe por qué se corrige la decisión"
               />
             </label>
+            {correctionError && (
+              <div className="receipt-modal-error" role="alert">
+                <AlertCircle />
+                <span>{correctionError}</span>
+              </div>
+            )}
             <footer>
               <button onClick={() => setSelected(null)}>Cancelar</button>
               <button

@@ -1,0 +1,155 @@
+.academic-management-view .academic-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.month-grid article > span.assignment,
+.agenda-list > article > div > i.assignment {
+  background: #fff0df;
+  color: #c87613;
+}
+
+.academic-page-head.admin > div:last-child {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.academic-management-view .academic-tools {
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+}
+
+.academic-tools .academic-archive-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.academic-tools .academic-archive-filter svg {
+  width: 13px;
+  height: 13px;
+}
+
+.academic-management-view .agenda-list.manage > article.archived {
+  margin-inline: -7px;
+  padding-inline: 7px;
+  border-radius: 9px;
+  background: #f7f7fb;
+  opacity: 0.84;
+}
+
+.agenda-list.manage article span > em {
+  width: max-content;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eceaf2;
+  color: #706c7e;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.agenda-list .academic-event-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.agenda-list .academic-event-actions > button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #e2e2ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #646d83;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.agenda-list .academic-event-actions > button:hover {
+  border-color: #b9adf1;
+  color: #6041dc;
+  transform: translateY(-1px);
+}
+
+.agenda-list .academic-event-actions > button.archive:hover {
+  border-color: #f1b9bd;
+  background: #fff4f4;
+  color: #c43f49;
+}
+
+.agenda-list .academic-event-actions > button.restore {
+  border-color: #bce3d0;
+  background: #effaf4;
+  color: #25845a;
+}
+
+.agenda-list .academic-event-actions svg,
+.agenda-list .academic-event-actions .publish-toggle svg {
+  width: 15px !important;
+  height: 15px;
+}
+
+.academic-edit-note {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #ddd5ff;
+  border-radius: 8px;
+  background: #f5f2ff;
+  color: #62558f;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.academic-modal select:disabled,
+.question-builder input:disabled {
+  cursor: not-allowed;
+  color: #747b8d;
+  background: #f1f2f6;
+}
+
+.agenda-list .academic-event-actions .publish-toggle svg {
+  width: 23px !important;
+  height: 23px;
+}
+
+@media (max-width: 820px) {
+  .academic-management-view .academic-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .academic-management-view .academic-tools > label {
+    grid-column: 1 / -1;
+  }
+
+  .academic-management-view .academic-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .academic-management-view .academic-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .academic-management-view .academic-tools > div {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .academic-management-view .academic-tools > div button {
+    flex: 1;
+  }
+
+  .agenda-list .academic-event-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .academic-management-view .academic-kpis {
+    grid-template-columns: 1fr;
+  }
+}
